@@ -565,10 +565,49 @@ MatrixXd georeference_lidar_point(MatrixXd data, MatrixXd boresight_LA, MatrixXd
 
 UniquePlanes match_scenes(vector<Scene> scenes)
 {
-
+	/*
+	 * This function takes a vector of Scenes, and returns a UniquePlanes object that contains the
+	 * information about the relative orientation of each scene, specifically matching each of the planes
+	 * in the scenes to each other
+	 *
+	 * This is done by taking the first scene as base. For each of the following scenes, the scene orientation is estimated by
+	 * Point Cloud registration using ICP (PCL: https://pcl.readthedocs.io/projects/tutorials/en/latest/iterative_closest_point.html#iterative-closest-point)
+	 *
+	 * Then, using the orientation estimated from registration, each of the planes are matched to the base scene's planes. This is done
+	 * by iteratively finding the "fit" of the points to each of the base scene's planes. Whichever has the best fit, is matched.
+	 *
+	 */
 	// For each scene, match planes. First scene is taken as base. 
-	Scene base_scene;
+	Scene base_scene, registration_scene;
 	UniquePlanes unique;
+	Orientation cloud_rel_orientation; // from registration
+	PointCloudXYZptr base_cloud, registration_cloud;
+	PointCloudXYZ temp_registration_cloud;// ICP object for registering
+	base_scene = scenes[0];
+
+	// Create the base cloud for registration
+	for (int i = 0;i<scenes[0].planes.size(); i++){
+		*base_cloud += *scenes[0].planes[0].points_on_plane;
+	}
+
+	for (int i=1; i<scenes.size();i++){
+		// For each scene (except the base scene 0), register to base scene
+		// Concatenate each of the planes in to one, for registration
+		registration_scene = scenes[i];
+		// Create the base cloud for registration
+		for (int i = 0;i<registration_scene.planes.size(); i++){
+			*registration_cloud += *registration_scene.planes[0].points_on_plane;
+		}
+
+		// register the two point clouds
+		register_clouds(cloud_rel_orientation, base_cloud, registration_cloud);
+
+	}
+
+
+
+
+
 	double del_omega, del_phi, del_kappa; // Defined as scene(i) - base
 	Matrix3b3 R_del;
 	RowVector3d target_plane_vec, base_plane_vec, target_rot_vec, mapping_temp, global_translation;
@@ -1490,6 +1529,32 @@ void get_hour_day(double GPS_time, double *Hour, int *Day)
 
 	double temp = (GPS_time - (86400 * *Day)) / 3600;
 	*Hour = floor(temp);
+}
+
+void register_clouds(Orientation &register_orientation, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2) {
+
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	Matrix4d icp_transf = Matrix4d::Identity ();
+	PointCloudXYZ reg_cloud;
+
+	icp.setInputSource(cloud1);
+	icp.setInputTarget(cloud2);
+
+	icp.align(reg_cloud);
+	icp_transf = icp.getFinalTransformation ().cast<double>(); // transforamtion 4X4 matrix
+	// Angles
+	Matrix3d rotation_mat = Matrix4d::Identity();
+	double omega, phi, kappa;
+	rotation_mat << icp_transf (0, 0), icp_transf (0, 1), icp_transf (0, 2)
+			<< icp_transf (1, 0), icp_transf (1, 1), icp_transf (1, 2)
+			<< icp_transf (2, 0), icp_transf (2, 1), icp_transf (2, 2);
+	Convert_R_to_Angles(rotation_mat, register_orientation.omega, register_orientation.phi, register_orientation.kappa);
+
+	// Translation
+	register_orientation.X = icp_transf (0, 3);
+	register_orientation.Y = icp_transf (1, 3);
+	register_orientation.Z = icp_transf (2, 3);
+
 }
 
 double round_time(double time)

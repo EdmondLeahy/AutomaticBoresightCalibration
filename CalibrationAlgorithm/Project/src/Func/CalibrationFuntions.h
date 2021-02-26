@@ -140,6 +140,8 @@ void visualize_planes(vector<Plane> planes);
 
 void visualize_cloud(PointCloudXYZptr cloud);
 
+void register_clouds(Orientation &register_orientation, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2);
+
 //void find_consensus_planes(vector<Plane> &all_planes);
 
 bool sort_cloud(Plane plane_1, Plane plan_2);
