@@ -1543,11 +1543,11 @@ void register_clouds(Orientation &register_orientation, PointCloudXYZptr cloud1,
 	icp.align(reg_cloud);
 	icp_transf = icp.getFinalTransformation ().cast<double>(); // transforamtion 4X4 matrix
 	// Angles
-	Matrix3d rotation_mat = Matrix4d::Identity();
+	Matrix3d rotation_mat = Matrix3d::Identity();
 	double omega, phi, kappa;
-	rotation_mat << icp_transf (0, 0), icp_transf (0, 1), icp_transf (0, 2)
-			<< icp_transf (1, 0), icp_transf (1, 1), icp_transf (1, 2)
-			<< icp_transf (2, 0), icp_transf (2, 1), icp_transf (2, 2);
+	rotation_mat << icp_transf (0, 0), icp_transf (0, 1), icp_transf (0, 2),
+			icp_transf (1, 0), icp_transf (1, 1), icp_transf (1, 2),
+			icp_transf (2, 0), icp_transf (2, 1), icp_transf (2, 2);
 	Convert_R_to_Angles(rotation_mat, register_orientation.omega, register_orientation.phi, register_orientation.kappa);
 
 	// Translation
