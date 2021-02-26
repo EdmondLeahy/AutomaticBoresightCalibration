@@ -44,19 +44,19 @@ int main() {
 	vector<double> shiftdown;
 	find_apply_shiftdown(scenes, shiftdown);
 
-
-
 	clog << "\n-------------------------Finished finding planes -------------------------------------------------------\n";
 	clog << "Matching planes....\n";
 	// TODO: MATCH PLANES
 	UniquePlanes unique_planes = match_scenes(scenes);
 	clog << "Done.\nRemoving infrequent planes....";
-
-	clog << "\n\nMapping vector POST REMOVE:\n";
+	clog << "\n\nMapping vector PRE REMOVE:\n";
 	print_vector(unique_planes.mapping_vec);
 	//Remove less frequent planes.
 	int num_removed = remove_unfrequent(unique_planes);
 	clog << "\n\nDone. Removed " << num_removed << " infrequent planes.\n";
+
+	clog << "\n\nMapping vector POST REMOVE:\n";
+	print_vector(unique_planes.mapping_vec);
 
 
 	clog << "\n\n FINISHED CALIBRATION\n\n";

@@ -96,6 +96,7 @@ struct UniquePlanes {
 	vector<int> frequency;
 	vector<Plane> unique_planes;
 	vector<Orientation> reference_orientations;
+	PointCloudXYZptr registration_cloud;
 
 
 };
@@ -140,7 +141,9 @@ void visualize_planes(vector<Plane> planes);
 
 void visualize_cloud(PointCloudXYZptr cloud);
 
-void register_clouds(Orientation &register_orientation, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2);
+bool register_clouds(Orientation &register_orientation, Matrix4d &registration_result, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2);
+
+double find_plane_fit(Plane fit_plane, PointCloudXYZptr fit_cloud);
 
 //void find_consensus_planes(vector<Plane> &all_planes);
 

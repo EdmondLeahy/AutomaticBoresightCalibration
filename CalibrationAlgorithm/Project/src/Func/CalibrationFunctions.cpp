@@ -581,140 +581,194 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 	Scene base_scene, registration_scene;
 	UniquePlanes unique;
 	Orientation cloud_rel_orientation; // from registration
-	PointCloudXYZptr base_cloud, registration_cloud;
+	PointCloudXYZptr base_cloud(new PointCloudXYZ), registration_cloud(new PointCloudXYZ), temp_rot_plane_cloud(new PointCloudXYZ);
+	Matrix4d registration_orientation = Matrix4d::Identity();
 	PointCloudXYZ temp_registration_cloud;// ICP object for registering
+	RowVector3d mapping_temp;
+	double plane_fit;
+	double best_fit;
+	double best_fit_plane;
 	base_scene = scenes[0];
+
 
 	// Create the base cloud for registration
 	for (int i = 0;i<scenes[0].planes.size(); i++){
-		*base_cloud += *scenes[0].planes[0].points_on_plane;
+		*base_cloud += *scenes[0].planes[i].points_on_plane;
 	}
+	//Add base scene to unique planes
+	for (int i = 0; i < base_scene.planes.size(); i++) {
 
-	for (int i=1; i<scenes.size();i++){
-		// For each scene (except the base scene 0), register to base scene
-		// Concatenate each of the planes in to one, for registration
-		registration_scene = scenes[i];
-		// Create the base cloud for registration
-		for (int i = 0;i<registration_scene.planes.size(); i++){
-			*registration_cloud += *registration_scene.planes[0].points_on_plane;
-		}
-
-		// register the two point clouds
-		register_clouds(cloud_rel_orientation, base_cloud, registration_cloud);
-
-	}
-
-
-
-
-
-	double del_omega, del_phi, del_kappa; // Defined as scene(i) - base
-	Matrix3b3 R_del;
-	RowVector3d target_plane_vec, base_plane_vec, target_rot_vec, mapping_temp, global_translation;
-	vector<int> candidates;
-	double thresh_orientation = 0.1;
-	double best_dist, dot_prod, dist_temp, plane_dist, best_prod, az_test;
-	int best_plane;
-	Plane temp_plane;
-	Orientation temp_orientation;
-
-	//Add base scene to unique planes, as there is nothing to match yet
-	for (int i = 0; i < scenes[0].planes.size(); i++) {
-
-
-		plane_to_global(scenes[0].planes[i], scenes[0].scene_orientation);
-
-		unique.unique_planes.push_back(scenes[0].planes[i]);
+		unique.unique_planes.push_back(base_scene.planes[i]);
 		mapping_temp << i , 0 , i;
-
+		unique.registration_cloud = base_cloud;
 		unique.mapping_vec.push_back(mapping_temp);
 		unique.reference_orientations.push_back(scenes[0].scene_orientation);
 		unique.frequency.push_back(1);
 
 	}
 
-	for (int i = 1; i < scenes.size(); i++) // For each Target scene i
-	{
-		for (int j = 0; j < scenes[i].planes.size(); j++) // for each plane j in target scene i
-		{
-			// Change plane orientation to global frame. 
-			plane_to_global(scenes[i].planes[j], scenes[i].scene_orientation);
-			// Target plane to vector
-			target_plane_vec << scenes[i].planes[j].a1, scenes[i].planes[j].a2, scenes[i].planes[j].a3;
-			
-			candidates.clear();
-			for (int k = 0; k < unique.unique_planes.size();k++) // for each unique plane k
-			{
-				
-				// Base plane to matrix
-				base_plane_vec << unique.unique_planes[k].a1, unique.unique_planes[k].a2, unique.unique_planes[k].a3;
-				// ------- Dot Product Check -------------
-				dot_prod = base_plane_vec.dot(target_plane_vec);
-				if ((1 - abs(dot_prod)) < thresh_orientation)
-				{
-					candidates.push_back(k); // place candidate unique plane index in vector
-				}
-
-			}
-
-			// If there is more than 1 candidate, check the relative distances
-
-			// reset distance threshold
-			best_dist = 10; // Planes should definitely not be more than 40 meters away from each other
-			best_plane = -1;
-			// For each candidate plane, find closest matching plane in base (Euclidian distance)
-			if (candidates.size() > 1)
-			{
-				for (int m = 0; m < candidates.size(); m++)
-				{
-					//dist_temp = check_plane_dists(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
-					dist_temp = abs(abs(unique.unique_planes[candidates[m]].b) - abs(scenes[i].planes[j].b));
 
 
-					//Azimuth check
-					az_test = check_plane_az(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
+	for (int i=1; i<scenes.size();i++){
+		// For each scene (except the base scene 0), register to base scene
+		// Concatenate each of the planes in to one, for registration
 
+		registration_scene = scenes[i];
+		// Create the base cloud for registration
+		for (int j = 0;j<registration_scene.planes.size(); j++){
+			*registration_cloud += *registration_scene.planes[j].points_on_plane;
+		}
 
+		// register the two point clouds
+		if (register_clouds(cloud_rel_orientation, registration_orientation, base_cloud, registration_cloud)){
 
-					//dist_temp = max(abs(unique.unique_planes[candidates[m]].b), abs(scenes[i].planes[j].b)) + 
+			// for each plane in the target scene, rotate using the registration values and check planes
+			for (int j = 0;j<registration_scene.planes.size(); j++){
 
-					if (dist_temp < best_dist && az_test < 50)
-					{
-						//This is the best plane so far
-						best_dist = abs(dist_temp);
-						best_plane = candidates[m]; // save the base plane index
+				best_fit = 1000; // This acts as a threshold!
+				best_fit_plane = -1;
+				mapping_temp = RowVector3d::Identity();
+				// Rotate plane
+				transformPointCloud (*registration_scene.planes[j].points_on_plane, *temp_rot_plane_cloud, registration_orientation);
+				//Check each base plane
+				for (int k=0;k<unique.unique_planes.size();k++){
+					plane_fit = find_plane_fit(unique.unique_planes[k],registration_scene.planes[j].points_on_plane);
+					if (plane_fit < best_fit){
+						best_fit = plane_fit;
+						best_fit_plane = k;
 					}
 				}
-			}
 
-			else if (candidates.size() == 1)
-			{
-				best_plane = candidates[0];
-			}
+				if(best_fit < 10){
+					mapping_temp << best_fit_plane , i , j;
+					unique.mapping_vec.push_back(mapping_temp);
+					unique.frequency[best_fit_plane] += 1;
+				}
+				else{
+					// This plane is new. Add it to the unique planes.
+					unique.unique_planes.push_back(scenes[i].planes[j]);
+					mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
+					unique.mapping_vec.push_back(mapping_temp);
+					unique.frequency.push_back(1);
+					unique.reference_orientations.push_back(scenes[i].scene_orientation);
+					unique.registration_cloud = registration_cloud;
 
-			if (best_plane != -1)
-			{
-				// Unique plane match. This plane already exists. Add frequency
-				// Add the best plane to the mapping matrix
-				mapping_temp << best_plane, i, j;
-				unique.mapping_vec.push_back(mapping_temp);
-				//update_frequency
-				unique.frequency[best_plane] = unique.frequency[best_plane] + 1;
-				
+				}
 			}
-			else
-			{
-				// This plane is new. Add it to the unique planes.
-				unique.unique_planes.push_back(scenes[i].planes[j]);
-				mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
-				unique.mapping_vec.push_back(mapping_temp);
-				unique.frequency.push_back(1);
-				unique.reference_orientations.push_back(scenes[i].scene_orientation);
-			}
-
 		}
-		
 	}
+
+
+
+//
+//
+//	double del_omega, del_phi, del_kappa; // Defined as scene(i) - base
+//	Matrix3b3 R_del;
+//	RowVector3d target_plane_vec, base_plane_vec, target_rot_vec, mapping_temp, global_translation;
+//	vector<int> candidates;
+//	double thresh_orientation = 0.1;
+//	double best_dist, dot_prod, dist_temp, plane_dist, best_prod, az_test;
+//	int best_plane;
+//	Plane temp_plane;
+//	Orientation temp_orientation;
+//
+//	//Add base scene to unique planes, as there is nothing to match yet
+//	for (int i = 0; i < scenes[0].planes.size(); i++) {
+//
+//
+//		plane_to_global(scenes[0].planes[i], scenes[0].scene_orientation);
+//
+//		unique.unique_planes.push_back(scenes[0].planes[i]);
+//		mapping_temp << i , 0 , i;
+//
+//		unique.mapping_vec.push_back(mapping_temp);
+//		unique.reference_orientations.push_back(scenes[0].scene_orientation);
+//		unique.frequency.push_back(1);
+//
+//	}
+//
+//	for (int i = 1; i < scenes.size(); i++) // For each Target scene i
+//	{
+//		for (int j = 0; j < scenes[i].planes.size(); j++) // for each plane j in target scene i
+//		{
+//			// Change plane orientation to global frame.
+//			plane_to_global(scenes[i].planes[j], scenes[i].scene_orientation);
+//			// Target plane to vector
+//			target_plane_vec << scenes[i].planes[j].a1, scenes[i].planes[j].a2, scenes[i].planes[j].a3;
+//
+//			candidates.clear();
+//			for (int k = 0; k < unique.unique_planes.size();k++) // for each unique plane k
+//			{
+//
+//				// Base plane to matrix
+//				base_plane_vec << unique.unique_planes[k].a1, unique.unique_planes[k].a2, unique.unique_planes[k].a3;
+//				// ------- Dot Product Check -------------
+//				dot_prod = base_plane_vec.dot(target_plane_vec);
+//				if ((1 - abs(dot_prod)) < thresh_orientation)
+//				{
+//					candidates.push_back(k); // place candidate unique plane index in vector
+//				}
+//
+//			}
+//
+//			// If there is more than 1 candidate, check the relative distances
+//
+//			// reset distance threshold
+//			best_dist = 10; // Planes should definitely not be more than 40 meters away from each other
+//			best_plane = -1;
+//			// For each candidate plane, find closest matching plane in base (Euclidian distance)
+//			if (candidates.size() > 1)
+//			{
+//				for (int m = 0; m < candidates.size(); m++)
+//				{
+//					//dist_temp = check_plane_dists(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
+//					dist_temp = abs(abs(unique.unique_planes[candidates[m]].b) - abs(scenes[i].planes[j].b));
+//
+//
+//					//Azimuth check
+//					az_test = check_plane_az(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
+//
+//
+//
+//					//dist_temp = max(abs(unique.unique_planes[candidates[m]].b), abs(scenes[i].planes[j].b)) +
+//
+//					if (dist_temp < best_dist && az_test < 50)
+//					{
+//						//This is the best plane so far
+//						best_dist = abs(dist_temp);
+//						best_plane = candidates[m]; // save the base plane index
+//					}
+//				}
+//			}
+//
+//			else if (candidates.size() == 1)
+//			{
+//				best_plane = candidates[0];
+//			}
+//
+//			if (best_plane != -1)
+//			{
+//				// Unique plane match. This plane already exists. Add frequency
+//				// Add the best plane to the mapping matrix
+//				mapping_temp << best_plane, i, j;
+//				unique.mapping_vec.push_back(mapping_temp);
+//				//update_frequency
+//				unique.frequency[best_plane] = unique.frequency[best_plane] + 1;
+//
+//			}
+//			else
+//			{
+//				// This plane is new. Add it to the unique planes.
+//				unique.unique_planes.push_back(scenes[i].planes[j]);
+//				mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
+//				unique.mapping_vec.push_back(mapping_temp);
+//				unique.frequency.push_back(1);
+//				unique.reference_orientations.push_back(scenes[i].scene_orientation);
+//			}
+//
+//		}
+//
+//	}
 
 	return unique;
 }
@@ -1531,29 +1585,45 @@ void get_hour_day(double GPS_time, double *Hour, int *Day)
 	*Hour = floor(temp);
 }
 
-void register_clouds(Orientation &register_orientation, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2) {
+bool register_clouds(Orientation &register_orientation, Matrix4d &registration_result, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2) {
 
 	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-	Matrix4d icp_transf = Matrix4d::Identity ();
 	PointCloudXYZ reg_cloud;
 
 	icp.setInputSource(cloud1);
 	icp.setInputTarget(cloud2);
 
 	icp.align(reg_cloud);
-	icp_transf = icp.getFinalTransformation ().cast<double>(); // transforamtion 4X4 matrix
+	registration_result = icp.getFinalTransformation ().cast<double>(); // transforamtion 4X4 matrix
 	// Angles
 	Matrix3d rotation_mat = Matrix3d::Identity();
 	double omega, phi, kappa;
-	rotation_mat << icp_transf (0, 0), icp_transf (0, 1), icp_transf (0, 2),
-			icp_transf (1, 0), icp_transf (1, 1), icp_transf (1, 2),
-			icp_transf (2, 0), icp_transf (2, 1), icp_transf (2, 2);
+	rotation_mat << registration_result (0, 0), registration_result (0, 1), registration_result (0, 2),
+			registration_result (1, 0), registration_result (1, 1), registration_result (1, 2),
+			registration_result (2, 0), registration_result (2, 1), registration_result (2, 2);
 	Convert_R_to_Angles(rotation_mat, register_orientation.omega, register_orientation.phi, register_orientation.kappa);
 
 	// Translation
-	register_orientation.X = icp_transf (0, 3);
-	register_orientation.Y = icp_transf (1, 3);
-	register_orientation.Z = icp_transf (2, 3);
+	register_orientation.X = registration_result (0, 3);
+	register_orientation.Y = registration_result (1, 3);
+	register_orientation.Z = registration_result (2, 3);
+
+	return icp.converged_;
+}
+
+double find_plane_fit(Plane fit_plane, PointCloudXYZptr fit_cloud) {
+
+	double fit_temp=0;
+	double average = 0;
+	vector<double> fit;
+
+	for (int i=0;i<fit_cloud->points.size();i++){
+		fit_temp = fit_cloud->points[i].x * fit_plane.a1 + fit_cloud->points[i].y * fit_plane.a2 + fit_cloud->points[i].z * fit_plane.a3 + fit_plane.b;
+		fit.push_back(fit_temp);
+	}
+	average = accumulate( fit.begin(), fit.end(), 0.0) / fit_cloud->points.size();
+
+	return abs(average);
 
 }
 
