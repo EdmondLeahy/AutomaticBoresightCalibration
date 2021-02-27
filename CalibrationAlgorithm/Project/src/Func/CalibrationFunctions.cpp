@@ -600,13 +600,11 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 
 		unique.unique_planes.push_back(base_scene.planes[i]);
 		mapping_temp << i , 0 , i;
-		unique.registration_cloud = base_cloud;
 		unique.mapping_vec.push_back(mapping_temp);
 		unique.reference_orientations.push_back(scenes[0].scene_orientation);
 		unique.frequency.push_back(1);
 
 	}
-
 
 
 	for (int i=1; i<scenes.size();i++){
@@ -615,12 +613,28 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 
 		registration_scene = scenes[i];
 		// Create the base cloud for registration
-		for (int j = 0;j<registration_scene.planes.size(); j++){
+		*registration_cloud = *registration_scene.planes[0].points_on_plane;
+		for (int j = 1;j<registration_scene.planes.size(); j++){
 			*registration_cloud += *registration_scene.planes[j].points_on_plane;
 		}
 
+
 		// register the two point clouds
-		if (register_clouds(cloud_rel_orientation, registration_orientation, base_cloud, registration_cloud)){
+		if (register_clouds(cloud_rel_orientation, registration_orientation, registration_cloud, base_cloud)){
+
+			// ########### DEBUG ######################
+			PointCloudXYZptr merged_cloud(new PointCloudXYZ), temp_print_cloud(new PointCloudXYZ);
+			transformPointCloud (*registration_cloud, *temp_print_cloud, registration_orientation);
+			*merged_cloud += *base_cloud;
+			*merged_cloud += *temp_print_cloud;
+			pcl::io::savePCDFileASCII("merged_sc1_sc2.pcd", *merged_cloud);
+			pcl::io::savePCDFileASCII("sc1.pcd", *base_cloud);
+			pcl::io::savePCDFileASCII("sc2.pcd", *registration_cloud);
+			pcl::io::savePCDFileASCII("sc2_rotated.pcd", *temp_print_cloud);
+			cout << "REMOVE ME" << endl;
+			// ##################################################
+
+
 
 			// for each plane in the target scene, rotate using the registration values and check planes
 			for (int j = 0;j<registration_scene.planes.size(); j++){
@@ -630,9 +644,10 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 				mapping_temp = RowVector3d::Identity();
 				// Rotate plane
 				transformPointCloud (*registration_scene.planes[j].points_on_plane, *temp_rot_plane_cloud, registration_orientation);
+
 				//Check each base plane
 				for (int k=0;k<unique.unique_planes.size();k++){
-					plane_fit = find_plane_fit(unique.unique_planes[k],registration_scene.planes[j].points_on_plane);
+					plane_fit = find_plane_fit(unique.unique_planes[k],temp_rot_plane_cloud);
 					if (plane_fit < best_fit){
 						best_fit = plane_fit;
 						best_fit_plane = k;
@@ -651,124 +666,14 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 					unique.mapping_vec.push_back(mapping_temp);
 					unique.frequency.push_back(1);
 					unique.reference_orientations.push_back(scenes[i].scene_orientation);
-					unique.registration_cloud = registration_cloud;
 
 				}
+
+				cout << "Mapping vec:\n";
+				print_vector(unique.mapping_vec);
 			}
 		}
 	}
-
-
-
-//
-//
-//	double del_omega, del_phi, del_kappa; // Defined as scene(i) - base
-//	Matrix3b3 R_del;
-//	RowVector3d target_plane_vec, base_plane_vec, target_rot_vec, mapping_temp, global_translation;
-//	vector<int> candidates;
-//	double thresh_orientation = 0.1;
-//	double best_dist, dot_prod, dist_temp, plane_dist, best_prod, az_test;
-//	int best_plane;
-//	Plane temp_plane;
-//	Orientation temp_orientation;
-//
-//	//Add base scene to unique planes, as there is nothing to match yet
-//	for (int i = 0; i < scenes[0].planes.size(); i++) {
-//
-//
-//		plane_to_global(scenes[0].planes[i], scenes[0].scene_orientation);
-//
-//		unique.unique_planes.push_back(scenes[0].planes[i]);
-//		mapping_temp << i , 0 , i;
-//
-//		unique.mapping_vec.push_back(mapping_temp);
-//		unique.reference_orientations.push_back(scenes[0].scene_orientation);
-//		unique.frequency.push_back(1);
-//
-//	}
-//
-//	for (int i = 1; i < scenes.size(); i++) // For each Target scene i
-//	{
-//		for (int j = 0; j < scenes[i].planes.size(); j++) // for each plane j in target scene i
-//		{
-//			// Change plane orientation to global frame.
-//			plane_to_global(scenes[i].planes[j], scenes[i].scene_orientation);
-//			// Target plane to vector
-//			target_plane_vec << scenes[i].planes[j].a1, scenes[i].planes[j].a2, scenes[i].planes[j].a3;
-//
-//			candidates.clear();
-//			for (int k = 0; k < unique.unique_planes.size();k++) // for each unique plane k
-//			{
-//
-//				// Base plane to matrix
-//				base_plane_vec << unique.unique_planes[k].a1, unique.unique_planes[k].a2, unique.unique_planes[k].a3;
-//				// ------- Dot Product Check -------------
-//				dot_prod = base_plane_vec.dot(target_plane_vec);
-//				if ((1 - abs(dot_prod)) < thresh_orientation)
-//				{
-//					candidates.push_back(k); // place candidate unique plane index in vector
-//				}
-//
-//			}
-//
-//			// If there is more than 1 candidate, check the relative distances
-//
-//			// reset distance threshold
-//			best_dist = 10; // Planes should definitely not be more than 40 meters away from each other
-//			best_plane = -1;
-//			// For each candidate plane, find closest matching plane in base (Euclidian distance)
-//			if (candidates.size() > 1)
-//			{
-//				for (int m = 0; m < candidates.size(); m++)
-//				{
-//					//dist_temp = check_plane_dists(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
-//					dist_temp = abs(abs(unique.unique_planes[candidates[m]].b) - abs(scenes[i].planes[j].b));
-//
-//
-//					//Azimuth check
-//					az_test = check_plane_az(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
-//
-//
-//
-//					//dist_temp = max(abs(unique.unique_planes[candidates[m]].b), abs(scenes[i].planes[j].b)) +
-//
-//					if (dist_temp < best_dist && az_test < 50)
-//					{
-//						//This is the best plane so far
-//						best_dist = abs(dist_temp);
-//						best_plane = candidates[m]; // save the base plane index
-//					}
-//				}
-//			}
-//
-//			else if (candidates.size() == 1)
-//			{
-//				best_plane = candidates[0];
-//			}
-//
-//			if (best_plane != -1)
-//			{
-//				// Unique plane match. This plane already exists. Add frequency
-//				// Add the best plane to the mapping matrix
-//				mapping_temp << best_plane, i, j;
-//				unique.mapping_vec.push_back(mapping_temp);
-//				//update_frequency
-//				unique.frequency[best_plane] = unique.frequency[best_plane] + 1;
-//
-//			}
-//			else
-//			{
-//				// This plane is new. Add it to the unique planes.
-//				unique.unique_planes.push_back(scenes[i].planes[j]);
-//				mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
-//				unique.mapping_vec.push_back(mapping_temp);
-//				unique.frequency.push_back(1);
-//				unique.reference_orientations.push_back(scenes[i].scene_orientation);
-//			}
-//
-//		}
-//
-//	}
 
 	return unique;
 }
@@ -1323,28 +1228,77 @@ vector<Scene> LoadDebugData(string basedir)
 	temp_scene1.planes[2].points_on_plane = plane_cloud1_3;
 	scenes.push_back(temp_scene1);
 
+//
+//	// Scene 2
+//	string scene2_dir = basedir + "O2_Planes/";
+//	string orientation2 = scene2_dir + "Orientation.txt";
+//	string plane1_0 = (scene2_dir + "Cloud_Plane_0.pcd");
+//	string plane1_1 = (scene2_dir + "Cloud_Plane_1.pcd");
+//	string plane1_2 = (scene2_dir + "Cloud_Plane_2.pcd");
+//	string plane_equations2 = scene2_dir + "PlaneEquations.txt";
+//
+//	pcd_files2.insert(pcd_files2.end(), {const_cast<char*>(plane1_0.c_str()),const_cast<char*>(plane1_1.c_str()),const_cast<char*>(plane1_2.c_str())});
+//
+//	temp_scene2.planes = get_debug_planes(const_cast<char*>(plane_equations2.c_str()));
+//	temp_scene2.scene_orientation = get_debug_orientation(const_cast<char*>(orientation2.c_str()));
+//
+//	PointCloudXYZptr plane_cloud2_1(new PointCloudXYZ), plane_cloud2_2(new PointCloudXYZ), plane_cloud2_3(new PointCloudXYZ);
+//	Read_Lidar_points(pcd_files2[0], plane_cloud2_1);
+//	Read_Lidar_points(pcd_files2[1], plane_cloud2_2);
+//	Read_Lidar_points(pcd_files2[2], plane_cloud2_3);
+//	temp_scene2.planes[0].points_on_plane = plane_cloud2_1;
+//	temp_scene2.planes[1].points_on_plane = plane_cloud2_2;
+//	temp_scene2.planes[2].points_on_plane = plane_cloud2_3;
+//	scenes.push_back(temp_scene2);
 
-	// Scene 2
-	string scene2_dir = basedir + "O2_Planes/";
-	string orientation2 = scene2_dir + "Orientation.txt";
-	string plane1_0 = (scene2_dir + "Cloud_Plane_0.pcd");
-	string plane1_1 = (scene2_dir + "Cloud_Plane_1.pcd");
-	string plane1_2 = (scene2_dir + "Cloud_Plane_2.pcd");
-	string plane_equations2 = scene2_dir + "PlaneEquations.txt";
 
-	pcd_files2.insert(pcd_files2.end(), {const_cast<char*>(plane1_0.c_str()),const_cast<char*>(plane1_1.c_str()),const_cast<char*>(plane1_2.c_str())});
 
-	temp_scene2.planes = get_debug_planes(const_cast<char*>(plane_equations2.c_str()));
-	temp_scene2.scene_orientation = get_debug_orientation(const_cast<char*>(orientation2.c_str()));
 
-	PointCloudXYZptr plane_cloud2_1(new PointCloudXYZ), plane_cloud2_2(new PointCloudXYZ), plane_cloud2_3(new PointCloudXYZ);
-	Read_Lidar_points(pcd_files2[0], plane_cloud2_1);
-	Read_Lidar_points(pcd_files2[1], plane_cloud2_2);
-	Read_Lidar_points(pcd_files2[2], plane_cloud2_3);
-	temp_scene2.planes[0].points_on_plane = plane_cloud2_1;
-	temp_scene2.planes[1].points_on_plane = plane_cloud2_2;
-	temp_scene2.planes[2].points_on_plane = plane_cloud2_3;
-	scenes.push_back(temp_scene2);
+	// Scene 3
+	string scene3_dir = basedir + "O3_Planes/";
+	string orientation3 = scene3_dir + "Orientation.txt";
+	string plane2_0 = (scene3_dir + "Cloud_Plane_0.pcd");
+	string plane2_1 = (scene3_dir + "Cloud_Plane_1.pcd");
+	string plane2_2 = (scene3_dir + "Cloud_Plane_2.pcd");
+	string plane_equations3 = scene3_dir + "PlaneEquations.txt";
+
+	pcd_files3.insert(pcd_files3.end(), {const_cast<char*>(plane2_0.c_str()),const_cast<char*>(plane2_1.c_str()),const_cast<char*>(plane2_2.c_str())});
+
+	temp_scene3.planes = get_debug_planes(const_cast<char*>(plane_equations3.c_str()));
+	temp_scene3.scene_orientation = get_debug_orientation(const_cast<char*>(orientation3.c_str()));
+
+	PointCloudXYZptr plane_cloud3_1(new PointCloudXYZ), plane_cloud3_2(new PointCloudXYZ), plane_cloud3_3(new PointCloudXYZ);
+	Read_Lidar_points(pcd_files3[0], plane_cloud3_1);
+	Read_Lidar_points(pcd_files3[1], plane_cloud3_2);
+	Read_Lidar_points(pcd_files3[2], plane_cloud3_3);
+	temp_scene3.planes[0].points_on_plane = plane_cloud3_1;
+	temp_scene3.planes[1].points_on_plane = plane_cloud3_2;
+	temp_scene3.planes[2].points_on_plane = plane_cloud3_3;
+	scenes.push_back(temp_scene3);
+
+
+	// Scene 4
+	string scene4_dir = basedir + "O4_Planes/";
+	string orientation4 = scene4_dir + "Orientation.txt";
+	string plane3_0 = (scene4_dir + "Cloud_Plane_0.pcd");
+	string plane3_1 = (scene4_dir + "Cloud_Plane_1.pcd");
+	string plane3_2 = (scene4_dir + "Cloud_Plane_2.pcd");
+	string plane_equations4 = scene4_dir + "PlaneEquations.txt";
+
+	pcd_files4.insert(pcd_files4.end(), {const_cast<char*>(plane3_0.c_str()),const_cast<char*>(plane3_1.c_str()),const_cast<char*>(plane3_2.c_str())});
+
+	temp_scene4.planes = get_debug_planes(const_cast<char*>(plane_equations4.c_str()));
+	temp_scene4.scene_orientation = get_debug_orientation(const_cast<char*>(orientation4.c_str()));
+
+	PointCloudXYZptr plane_cloud4_1(new PointCloudXYZ), plane_cloud4_2(new PointCloudXYZ), plane_cloud4_3(new PointCloudXYZ);
+	Read_Lidar_points(pcd_files4[0], plane_cloud4_1);
+	Read_Lidar_points(pcd_files4[1], plane_cloud4_2);
+	Read_Lidar_points(pcd_files4[2], plane_cloud4_3);
+	temp_scene4.planes[0].points_on_plane = plane_cloud4_1;
+	temp_scene4.planes[1].points_on_plane = plane_cloud4_2;
+	temp_scene4.planes[2].points_on_plane = plane_cloud4_3;
+	scenes.push_back(temp_scene4);
+
 
 
 

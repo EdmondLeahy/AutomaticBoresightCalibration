@@ -96,7 +96,6 @@ struct UniquePlanes {
 	vector<int> frequency;
 	vector<Plane> unique_planes;
 	vector<Orientation> reference_orientations;
-	PointCloudXYZptr registration_cloud;
 
 
 };
