@@ -247,7 +247,7 @@ MatrixXd BoresightLS::PtEqnWrtRotSb(double w_bjg, double phi_bjg, double K_bjg, 
 	return DSb1;
 }
 
-void BoresightLS::setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane_details_in, MatrixXd scene_details_in) {
+void BoresightLS::setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane_details_in, MatrixXd scene_details_in, VectorXd x0_est) {
 	point_details = point_details_in;
 	plane_details = plane_details_in;
 	scene_details = scene_details_in;
@@ -255,6 +255,8 @@ void BoresightLS::setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane
 	numLidPts = point_details.rows();
 	numPlanes = plane_details.rows();
 	numScenes = scene_details.rows();
+
+	setX0(x0_est);
 
 	u = 6 + 4*numPlanes;
 }

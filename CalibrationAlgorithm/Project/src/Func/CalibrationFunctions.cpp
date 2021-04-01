@@ -1191,8 +1191,9 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, Matri
 	for (int i = 0; i < unique.unique_planes.size(); i++)
 	{
 		plane_details(i,0) = unique.unique_planes[i].a1;
-		plane_details(i,1) = unique.unique_planes[i].a2, unique.unique_planes[i].a3;
-		plane_details(i,2) = unique.unique_planes[i].b;
+		plane_details(i,1) = unique.unique_planes[i].a2,
+		plane_details(i,2) = unique.unique_planes[i].a3;
+		plane_details(i,3) = unique.unique_planes[i].b;
 	}
 
 	//Scene Details

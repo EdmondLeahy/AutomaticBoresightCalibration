@@ -53,24 +53,29 @@ int main() {
 	int num_removed = remove_unfrequent(unique_planes);
 	cout << "Done.\n";
 
-//	cout << "\n\nMapping vector POST REMOVE:\n";
-//	print_vector(unique_planes.mapping_vec);
-
 	// Create observation for estimations
 	MatrixXd point_details = MatrixXd::Zero(1,1);
 	MatrixXd scene_details = MatrixXd::Zero(1,1);
 	MatrixXd plane_details = MatrixXd::Zero(1,1);
 	create_bundle_observations(scenes, unique_planes, point_details, scene_details, plane_details);
 
-	print_matrix(plane_details);
 
 	// ------------------------------------------------------------------------------------------------------------------------------
-	//									Least Squares
+	//									Least Squares Adjustment
 
 	BoresightLS boresight_adjustment;
+	VectorXd x0 = VectorXd::Zero(6+plane_details.rows()*4);
+
+	// Set the approximate values for the boresight parameters (given by NovAtel):
+	x0(0) = -0.661; // x
+	x0(0) = -0.272; // y
+	x0(0) = -1.4158; // z
+	x0(0) = 180; // omega
+	x0(0) = 0; // phi
+	x0(0) = 90; // kappa
 
 	//input the observations
-//	boresight_adjustment.setAdjustmentDetails(point_details, scene_details, plane_details);
+	boresight_adjustment.setAdjustmentDetails(point_details, scene_details, plane_details, x0);
 
 
 	clog << "\n\n FINISHED CALIBRATION\n\n";

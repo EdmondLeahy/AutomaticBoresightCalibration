@@ -32,7 +32,7 @@ class BoresightLS : public LeastSquares
 public:
 	const double LIGHTSPEED = (299792458.0);
 	BoresightLS();
-	void setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane_details_in, MatrixXd scene_details_in);
+	void setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane_details_in, MatrixXd scene_details_in, VectorXd x0_est);
 
 	void computeA();
 	void computew();
