@@ -726,20 +726,20 @@ void print_vector(vector<RowVectorXd> print_vector, char *filename)
 
 	}
 }
-
-void print_matrix(MatrixXd print_mat)
-{
-
-	for (int i = 0; i < print_mat.rows(); i++)
-	{
-		for (int j = 0; j < print_mat.cols(); j++)
-		{
-			printf("\t %0.3f ", print_mat(i,j));
-		}
-		printf("\n");
-
-	}
-}
+//
+//void print_matrix(MatrixXd print_mat)
+//{
+//
+//	for (int i = 0; i < print_mat.rows(); i++)
+//	{
+//		for (int j = 0; j < print_mat.cols(); j++)
+//		{
+//			printf("\t %0.3f ", print_mat(i,j));
+//		}
+//		printf("\n");
+//
+//	}
+//}
 
 void print_vector(vector<RowVectorXd> print_vector)
 {

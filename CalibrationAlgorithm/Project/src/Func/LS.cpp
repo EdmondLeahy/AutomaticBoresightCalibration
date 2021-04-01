@@ -1,6 +1,9 @@
 #include "LS.h"
 
 
+BoresightLS::BoresightLS()
+{
+}
 
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
@@ -34,6 +37,9 @@ void BoresightLS::computeA()
 
 }
 
+void BoresightLS::computefx(){
+	// pass
+}
 
 //Function to compute A
 void BoresightLS::computeAandw()

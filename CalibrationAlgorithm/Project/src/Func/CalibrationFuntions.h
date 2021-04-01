@@ -166,7 +166,7 @@ void print_vector(vector<RowVector3d> print_vector);
 void print_vector(vector<RowVectorXd> print_vector);
 void print_vector(vector<int> print_vector); 
 void print_vector(vector<RowVectorXd> print_vector, char *filename);
-void print_matrix(MatrixXd print_mat);
+//void print_matrix(MatrixXd print_mat);
 
 void print_cloud(PointCloudXYZptr cloud);
 

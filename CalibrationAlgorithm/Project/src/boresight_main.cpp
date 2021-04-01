@@ -54,16 +54,20 @@ int main() {
 	cout << "Done.\n";
 
 //	cout << "\n\nMapping vector POST REMOVE:\n";
-	print_vector(unique_planes.mapping_vec);
+//	print_vector(unique_planes.mapping_vec);
 
 	// Create observation for estimations
-	MatrixXd point_details, scene_details, plane_details;
+	MatrixXd point_details = MatrixXd::Zero(1,1);
+	MatrixXd scene_details = MatrixXd::Zero(1,1);
+	MatrixXd plane_details = MatrixXd::Zero(1,1);
 	create_bundle_observations(scenes, unique_planes, point_details, scene_details, plane_details);
+
+	print_matrix(plane_details);
 
 	// ------------------------------------------------------------------------------------------------------------------------------
 	//									Least Squares
 
-//	BoresightLS boresight_adjustment;
+	BoresightLS boresight_adjustment;
 
 	//input the observations
 //	boresight_adjustment.setAdjustmentDetails(point_details, scene_details, plane_details);
