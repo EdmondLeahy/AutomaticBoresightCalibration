@@ -565,116 +565,112 @@ MatrixXd georeference_lidar_point(MatrixXd data, MatrixXd boresight_LA, MatrixXd
 
 UniquePlanes match_scenes(vector<Scene> scenes)
 {
-
+	/*
+	 * This function takes a vector of Scenes, and returns a UniquePlanes object that contains the
+	 * information about the relative orientation of each scene, specifically matching each of the planes
+	 * in the scenes to each other
+	 *
+	 * This is done by taking the first scene as base. For each of the following scenes, the scene orientation is estimated by
+	 * Point Cloud registration using ICP (PCL: https://pcl.readthedocs.io/projects/tutorials/en/latest/iterative_closest_point.html#iterative-closest-point)
+	 *
+	 * Then, using the orientation estimated from registration, each of the planes are matched to the base scene's planes. This is done
+	 * by iteratively finding the "fit" of the points to each of the base scene's planes. Whichever has the best fit, is matched.
+	 *
+	 */
 	// For each scene, match planes. First scene is taken as base. 
-	Scene base_scene;
+	Scene base_scene, registration_scene;
 	UniquePlanes unique;
-	double del_omega, del_phi, del_kappa; // Defined as scene(i) - base
-	Matrix3b3 R_del;
-	RowVector3d target_plane_vec, base_plane_vec, target_rot_vec, mapping_temp, global_translation;
-	vector<int> candidates;
-	double thresh_orientation = 0.1;
-	double best_dist, dot_prod, dist_temp, plane_dist, best_prod, az_test;
-	int best_plane;
-	Plane temp_plane;
-	Orientation temp_orientation;
-
-	//Add base scene to unique planes, as there is nothing to match yet
-	for (int i = 0; i < scenes[0].planes.size(); i++) {
+	Orientation cloud_rel_orientation; // from registration
+	PointCloudXYZptr base_cloud(new PointCloudXYZ), registration_cloud(new PointCloudXYZ), temp_rot_plane_cloud(new PointCloudXYZ), az_match_reg_cloud(new PointCloudXYZ),
+					matching_plane_cloud(new PointCloudXYZ);
+	Matrix4d registration_orientation = Matrix4d::Identity();
+	Matrix4d scene_az_adjustment;
+	PointCloudXYZ temp_registration_cloud;// ICP object for registering
+	RowVector3d mapping_temp;
+	Matrix3d temp_rot;
+	double plane_fit, best_fit, best_fit_plane, az_diff;
+	base_scene = scenes[0];
 
 
-		plane_to_global(scenes[0].planes[i], scenes[0].scene_orientation);
+	// Create the base cloud for registration
+	for (int i = 0;i<scenes[0].planes.size(); i++){
+		*base_cloud += *scenes[0].planes[i].points_on_plane;
+	}
+	//Add base scene to unique planes
+	for (int i = 0; i < base_scene.planes.size(); i++) {
 
-		unique.unique_planes.push_back(scenes[0].planes[i]);
+		unique.unique_planes.push_back(base_scene.planes[i]);
 		mapping_temp << i , 0 , i;
-
 		unique.mapping_vec.push_back(mapping_temp);
 		unique.reference_orientations.push_back(scenes[0].scene_orientation);
 		unique.frequency.push_back(1);
 
 	}
 
-	for (int i = 1; i < scenes.size(); i++) // For each Target scene i
-	{
-		for (int j = 0; j < scenes[i].planes.size(); j++) // for each plane j in target scene i
-		{
-			// Change plane orientation to global frame. 
-			plane_to_global(scenes[i].planes[j], scenes[i].scene_orientation);
-			// Target plane to vector
-			target_plane_vec << scenes[i].planes[j].a1, scenes[i].planes[j].a2, scenes[i].planes[j].a3;
-			
-			candidates.clear();
-			for (int k = 0; k < unique.unique_planes.size();k++) // for each unique plane k
-			{
-				
-				// Base plane to matrix
-				base_plane_vec << unique.unique_planes[k].a1, unique.unique_planes[k].a2, unique.unique_planes[k].a3;
-				// ------- Dot Product Check -------------
-				dot_prod = base_plane_vec.dot(target_plane_vec);
-				if ((1 - abs(dot_prod)) < thresh_orientation)
-				{
-					candidates.push_back(k); // place candidate unique plane index in vector
-				}
 
-			}
+	for (int i=1; i<scenes.size();i++){
+		// For each scene (except the base scene 0), register to base scene
+		// Concatenate each of the planes in to one, for registration
 
-			// If there is more than 1 candidate, check the relative distances
-
-			// reset distance threshold
-			best_dist = 10; // Planes should definitely not be more than 40 meters away from each other
-			best_plane = -1;
-			// For each candidate plane, find closest matching plane in base (Euclidian distance)
-			if (candidates.size() > 1)
-			{
-				for (int m = 0; m < candidates.size(); m++)
-				{
-					//dist_temp = check_plane_dists(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
-					dist_temp = abs(abs(unique.unique_planes[candidates[m]].b) - abs(scenes[i].planes[j].b));
+		registration_scene = scenes[i];
+		// Create the base cloud for registration
+		*registration_cloud = *registration_scene.planes[0].points_on_plane;
+		for (int j = 1;j<registration_scene.planes.size(); j++){
+			*registration_cloud += *registration_scene.planes[j].points_on_plane;
+		}
+		// find the azimuth difference between the clouds (just to get close for ICP)
+		// TODO: use the initial boresight estimate for this! What if the sensor is on it's side?
+		az_diff = base_scene.scene_orientation.kappa - scenes[i].scene_orientation.kappa;
+		// create the rotation matrix
+		Rotation_g2i(0,0,-az_diff, temp_rot);
+		scene_az_adjustment << temp_rot(0,0), temp_rot(0,1), temp_rot(0,2), 0,
+								 temp_rot(1,0), temp_rot(1,1), temp_rot(1,2), 0,
+								 temp_rot(2,0), temp_rot(2,1), temp_rot(2,2), 0,
+								 0, 0, 0, 1;
+		// rotate the plane to get close to base
+		transformPointCloud (*registration_cloud, *az_match_reg_cloud, scene_az_adjustment);
 
 
-					//Azimuth check
-					az_test = check_plane_az(unique.reference_orientations[candidates[m]], scenes[i].scene_orientation, unique.unique_planes[candidates[m]], scenes[i].planes[j]);
+		// register the two point clouds
+		if (register_clouds(cloud_rel_orientation, registration_orientation, az_match_reg_cloud, base_cloud)){
 
+			// for each plane in the target scene, rotate using the registration values and check planes
+			for (int j = 0;j<registration_scene.planes.size(); j++){
 
+				best_fit = 10; // This acts as a threshold!
+				best_fit_plane = -1;
+				mapping_temp = RowVector3d::Identity();
+				// Rotate plane for azimuth delta
+				transformPointCloud (*registration_scene.planes[j].points_on_plane, *temp_rot_plane_cloud, scene_az_adjustment);
+				// rotate plane for registration
+				transformPointCloud (*temp_rot_plane_cloud, *matching_plane_cloud, registration_orientation);
 
-					//dist_temp = max(abs(unique.unique_planes[candidates[m]].b), abs(scenes[i].planes[j].b)) + 
-
-					if (dist_temp < best_dist && az_test < 50)
-					{
-						//This is the best plane so far
-						best_dist = abs(dist_temp);
-						best_plane = candidates[m]; // save the base plane index
+				//Check each base plane
+				for (int k=0;k<unique.unique_planes.size();k++){
+					plane_fit = find_plane_fit(unique.unique_planes[k],matching_plane_cloud);
+					if (plane_fit < best_fit){
+						best_fit = plane_fit;
+						best_fit_plane = k;
 					}
 				}
-			}
 
-			else if (candidates.size() == 1)
-			{
-				best_plane = candidates[0];
-			}
+				if(best_fit < 10){
+					mapping_temp << best_fit_plane , i , j;
+					unique.mapping_vec.push_back(mapping_temp);
+					unique.frequency[best_fit_plane] += 1;
+				}
+				else{
+					// This plane is new. Add it to the unique planes.
+					unique.unique_planes.push_back(scenes[i].planes[j]);
+					mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
+					unique.mapping_vec.push_back(mapping_temp);
+					unique.frequency.push_back(1);
+					unique.reference_orientations.push_back(scenes[i].scene_orientation);
 
-			if (best_plane != -1)
-			{
-				// Unique plane match. This plane already exists. Add frequency
-				// Add the best plane to the mapping matrix
-				mapping_temp << best_plane, i, j;
-				unique.mapping_vec.push_back(mapping_temp);
-				//update_frequency
-				unique.frequency[best_plane] = unique.frequency[best_plane] + 1;
-				
-			}
-			else
-			{
-				// This plane is new. Add it to the unique planes.
-				unique.unique_planes.push_back(scenes[i].planes[j]);
-				mapping_temp << unique.unique_planes.size() - 1, i, j; // will be referencing the next unique plane
-				unique.mapping_vec.push_back(mapping_temp);
-				unique.frequency.push_back(1);
-				unique.reference_orientations.push_back(scenes[i].scene_orientation);
-			}
+				}
 
+			}
 		}
-		
 	}
 
 	return unique;
@@ -1154,11 +1150,12 @@ MatrixXd merge_data(MatrixXd IE_data, MatrixXd lidar_data, double time)
 	return output;
 
 }
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vector<RowVectorXd> &point_details, vector<RowVectorXd> &scene_details, vector<RowVectorXd> &plane_details)
+void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details)
 {
 	//This function makes the three Bundle Adjustment observation vectors
 
 	RowVectorXd points_row(5), planes_row(4), scene_row(6);
+	vector<RowVectorXd> temp_pts;
 	Scene temp_scene;
 	double x, y, z;
 
@@ -1166,7 +1163,6 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vecto
 	//	This vector contains the details of each point in the adjustment. Each of these points are from a scene, 
 	//	and lie on one of the unique planes
 	//	| X | Y | Z | Unique Plane | Scene | 
-
 	for (int i = 0; i < unique.mapping_vec.size(); i++)
 	{
 		temp_scene = scenes[unique.mapping_vec[i](1)];
@@ -1176,26 +1172,41 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vecto
 			y = temp_scene.planes[unique.mapping_vec[i](2)].points_on_plane->points[j].y;
 			z = temp_scene.planes[unique.mapping_vec[i](2)].points_on_plane->points[j].z;
 			points_row << x, y, z, unique.mapping_vec[i](0), unique.mapping_vec[i](1);
-			point_details.push_back(points_row);
+			temp_pts.push_back(points_row);
+		}
+	}
+	//convert to Matrix
+	point_details = MatrixXd::Zero(temp_pts.size(),5);
+	for(int i=0;i<temp_pts.size();i++)
+	{
+		for(int j=0;j<5;j++){
+			point_details(i,j) = temp_pts[i](j);
 		}
 	}
 
 	//Plane Details
+	plane_details = MatrixXd::Zero(unique.unique_planes.size(),4);
 	//	This vector contains the details of each unique plane in the scenes.
 	//	| A1 | A2 | A3 | B | 
 	for (int i = 0; i < unique.unique_planes.size(); i++)
 	{
-		planes_row << unique.unique_planes[i].a1, unique.unique_planes[i].a2, unique.unique_planes[i].a3, unique.unique_planes[i].b;
-		plane_details.push_back(planes_row);
+		plane_details(i,0) = unique.unique_planes[i].a1;
+		plane_details(i,1) = unique.unique_planes[i].a2, unique.unique_planes[i].a3;
+		plane_details(i,2) = unique.unique_planes[i].b;
 	}
 
 	//Scene Details
+	scene_details = MatrixXd::Zero(scenes.size(),6);
 	//	This vector contains the details of each scene orientation details.
 	//	| X | Y | Z | Omega | Phi | Kappa |
 	for (int i = 0; i < scenes.size(); i++)
 	{
-		scene_row << scenes[i].scene_orientation.X, scenes[i].scene_orientation.Y, scenes[i].scene_orientation.Z, scenes[i].scene_orientation.omega, scenes[i].scene_orientation.phi, scenes[i].scene_orientation.kappa;
-		scene_details.push_back(scene_row);
+		scene_details(i,0) = scenes[i].scene_orientation.X;
+		scene_details(i,0) = scenes[i].scene_orientation.Y;
+		scene_details(i,0) = scenes[i].scene_orientation.Z;
+		scene_details(i,0) = scenes[i].scene_orientation.omega;
+		scene_details(i,0) = scenes[i].scene_orientation.phi;
+		scene_details(i,0) = scenes[i].scene_orientation.kappa;
 	}
 
 
@@ -1254,107 +1265,51 @@ vector<Scene> LoadDebugData(string basedir)
 	scenes.push_back(temp_scene2);
 
 
+	// Scene 3
+	string scene3_dir = basedir + "O3_Planes/";
+	string orientation3 = scene3_dir + "Orientation.txt";
+	string plane2_0 = (scene3_dir + "Cloud_Plane_0.pcd");
+	string plane2_1 = (scene3_dir + "Cloud_Plane_1.pcd");
+	string plane2_2 = (scene3_dir + "Cloud_Plane_2.pcd");
+	string plane_equations3 = scene3_dir + "PlaneEquations.txt";
 
-//	// Scene 2
-//	string scene2_dir = basedir + "O2_Planes\\";
-//	string orientation2 = scene2_dir + "Orientation.txt";
-//	string plane1_0 = scene2_dir + "Cloud_Plane_0.pcd";
-//	string plane1_1 = scene2_dir + "Cloud_Plane_0.pcd";
-//	string plane1_2 = scene2_dir + "Cloud_Plane_0.pcd";
-//	string plane_equations2 = scene2_dir + "PlaneEquations.txt";
-//
-//
-//	// Scene 3
-//	string scene3_dir = basedir + "O3_Planes\\";
-//	string orientation3 = scene3_dir + "Orientation.txt";
-//	string plane2_0 = scene3_dir + "Cloud_Plane_0.pcd";
-//	string plane2_1 = scene3_dir + "Cloud_Plane_0.pcd";
-//	string plane2_2 = scene3_dir + "Cloud_Plane_0.pcd";
-//	string plane_equations3 = scene3_dir + "PlaneEquations.txt";
-//
-//	// Scene 4
-//	string scene4_dir = basedir + "O4_Planes\\";
-//	string orientation4 = scene4_dir + "Orientation.txt";
-//	string plane3_0 = scene4_dir + "Cloud_Plane_0.pcd";
-//	string plane3_1 = scene4_dir + "Cloud_Plane_0.pcd";
-//	string plane3_2 = scene4_dir + "Cloud_Plane_0.pcd";
-//	string plane_equations4 = scene4_dir + "PlaneEquations.txt";
-//
-//	pcd_files1.push_back(plane0_0.c_str());
-//	pcd_files1.push_back(plane0_1.c_str());
-//	pcd_files1.push_back(plane0_2.c_str());
-//
-//
-//	pcd_files2.push_back(plane1_0.c_str());
-//	pcd_files2.push_back(plane1_1.c_str());
-//	pcd_files2.push_back(plane1_2.c_str());
-//
-//
-//	pcd_files3.push_back(plane2_0.c_str());
-//	pcd_files3.push_back(plane2_1.c_str());
-//	pcd_files3.push_back(plane2_2.c_str());
-//
-//	pcd_files4.push_back(plane3_0.c_str());
-//	pcd_files4.push_back(plane3_1.c_str());
-//	pcd_files4.push_back(plane3_2.c_str());
-//
-//
-//	temp_scene1.planes = get_debug_planes(plane_equations1);
-//	temp_scene1.scene_orientation = get_debug_orientation(orientation1);
-//
-//	PointCloudXYZptr plane_cloud1_1(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud1_2(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud1_3(new PointCloudXYZ);
-//	Read_Lidar_points(pcd_files1[0], plane_cloud1_1);
-//	Read_Lidar_points(pcd_files1[1], plane_cloud1_2);
-//	Read_Lidar_points(pcd_files1[2], plane_cloud1_3);
-//	temp_scene1.planes[0].points_on_plane = plane_cloud1_1;
-//	temp_scene1.planes[1].points_on_plane = plane_cloud1_2;
-//	temp_scene1.planes[2].points_on_plane = plane_cloud1_3;
-//	scenes.push_back(temp_scene1);
-//	//------------------------------------------------------------------
-//	temp_scene2.planes = get_debug_planes(plane_equations2);
-//	temp_scene2.scene_orientation = get_debug_orientation(orientation2);
-//
-//	PointCloudXYZptr plane_cloud2_1(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud2_2(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud2_3(new PointCloudXYZ);
-//	Read_Lidar_points(pcd_files2[0], plane_cloud2_1);
-//	Read_Lidar_points(pcd_files2[1], plane_cloud2_2);
-//	Read_Lidar_points(pcd_files2[2], plane_cloud2_3);
-//	temp_scene2.planes[0].points_on_plane = plane_cloud2_1;
-//	temp_scene2.planes[1].points_on_plane = plane_cloud2_2;
-//	temp_scene2.planes[2].points_on_plane = plane_cloud2_3;
-//	scenes.push_back(temp_scene2);
-//	//----------------------------------------------------------------------
-//	temp_scene3.planes = get_debug_planes(plane_equations3);
-//	temp_scene3.scene_orientation = get_debug_orientation(orientation3);
-//
-//	PointCloudXYZptr plane_cloud3_1(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud3_2(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud3_3(new PointCloudXYZ);
-//	Read_Lidar_points(pcd_files3[0], plane_cloud3_1);
-//	Read_Lidar_points(pcd_files3[1], plane_cloud3_2);
-//	Read_Lidar_points(pcd_files3[2], plane_cloud3_3);
-//	temp_scene3.planes[0].points_on_plane = plane_cloud3_1;
-//	temp_scene3.planes[1].points_on_plane = plane_cloud3_2;
-//	temp_scene3.planes[2].points_on_plane = plane_cloud3_3;
-//	scenes.push_back(temp_scene3);
-//
-//	//-------------------------------------------------------------------
-//	temp_scene4.planes = get_debug_planes(plane_equations4);
-//	temp_scene4.scene_orientation = get_debug_orientation(orientation4);
-//
-//	PointCloudXYZptr plane_cloud4_1(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud4_2(new PointCloudXYZ);
-//	PointCloudXYZptr plane_cloud4_3(new PointCloudXYZ);
-//	Read_Lidar_points(pcd_files4[0], plane_cloud4_1);
-//	Read_Lidar_points(pcd_files4[1], plane_cloud4_2);
-//	Read_Lidar_points(pcd_files4[2], plane_cloud4_3);
-//	temp_scene4.planes[0].points_on_plane = plane_cloud4_1;
-//	temp_scene4.planes[1].points_on_plane = plane_cloud4_2;
-//	temp_scene4.planes[2].points_on_plane = plane_cloud4_3;
-//	scenes.push_back(temp_scene4);
+	pcd_files3.insert(pcd_files3.end(), {const_cast<char*>(plane2_0.c_str()),const_cast<char*>(plane2_1.c_str()),const_cast<char*>(plane2_2.c_str())});
+
+	temp_scene3.planes = get_debug_planes(const_cast<char*>(plane_equations3.c_str()));
+	temp_scene3.scene_orientation = get_debug_orientation(const_cast<char*>(orientation3.c_str()));
+
+	PointCloudXYZptr plane_cloud3_1(new PointCloudXYZ), plane_cloud3_2(new PointCloudXYZ), plane_cloud3_3(new PointCloudXYZ);
+	Read_Lidar_points(pcd_files3[0], plane_cloud3_1);
+	Read_Lidar_points(pcd_files3[1], plane_cloud3_2);
+	Read_Lidar_points(pcd_files3[2], plane_cloud3_3);
+	temp_scene3.planes[0].points_on_plane = plane_cloud3_1;
+	temp_scene3.planes[1].points_on_plane = plane_cloud3_2;
+	temp_scene3.planes[2].points_on_plane = plane_cloud3_3;
+	scenes.push_back(temp_scene3);
+
+
+	// Scene 4
+	string scene4_dir = basedir + "O4_Planes/";
+	string orientation4 = scene4_dir + "Orientation.txt";
+	string plane3_0 = (scene4_dir + "Cloud_Plane_0.pcd");
+	string plane3_1 = (scene4_dir + "Cloud_Plane_1.pcd");
+	string plane3_2 = (scene4_dir + "Cloud_Plane_2.pcd");
+	string plane_equations4 = scene4_dir + "PlaneEquations.txt";
+
+	pcd_files4.insert(pcd_files4.end(), {const_cast<char*>(plane3_0.c_str()),const_cast<char*>(plane3_1.c_str()),const_cast<char*>(plane3_2.c_str())});
+
+	temp_scene4.planes = get_debug_planes(const_cast<char*>(plane_equations4.c_str()));
+	temp_scene4.scene_orientation = get_debug_orientation(const_cast<char*>(orientation4.c_str()));
+
+	PointCloudXYZptr plane_cloud4_1(new PointCloudXYZ), plane_cloud4_2(new PointCloudXYZ), plane_cloud4_3(new PointCloudXYZ);
+	Read_Lidar_points(pcd_files4[0], plane_cloud4_1);
+	Read_Lidar_points(pcd_files4[1], plane_cloud4_2);
+	Read_Lidar_points(pcd_files4[2], plane_cloud4_3);
+	temp_scene4.planes[0].points_on_plane = plane_cloud4_1;
+	temp_scene4.planes[1].points_on_plane = plane_cloud4_2;
+	temp_scene4.planes[2].points_on_plane = plane_cloud4_3;
+	scenes.push_back(temp_scene4);
+
 
 	cout << "returning from loading\n";
 
@@ -1490,6 +1445,53 @@ void get_hour_day(double GPS_time, double *Hour, int *Day)
 
 	double temp = (GPS_time - (86400 * *Day)) / 3600;
 	*Hour = floor(temp);
+}
+
+bool register_clouds(Orientation &register_orientation, Matrix4d &registration_result, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2) {
+
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	icp.setMaximumIterations (8000);
+	icp.setTransformationEpsilon (1e-9);
+//	icp.setMaxCorrespondenceDistance (0.05);
+//	icp.setEuclideanFitnessEpsilon (1);
+//	icp.setRANSACOutlierRejectionThreshold (1.5);
+	PointCloudXYZ reg_cloud;
+
+	icp.setInputSource(cloud1);
+	icp.setInputTarget(cloud2);
+
+	icp.align(reg_cloud);
+	registration_result = icp.getFinalTransformation().cast<double>(); // transformation 4X4 matrix
+	// Angles
+	Matrix3d rotation_mat = Matrix3d::Identity();
+	double omega, phi, kappa;
+	rotation_mat << registration_result (0, 0), registration_result (0, 1), registration_result (0, 2),
+			registration_result (1, 0), registration_result (1, 1), registration_result (1, 2),
+			registration_result (2, 0), registration_result (2, 1), registration_result (2, 2);
+	Convert_R_to_Angles(rotation_mat, register_orientation.omega, register_orientation.phi, register_orientation.kappa);
+
+	// Translation
+	register_orientation.X = registration_result (0, 3);
+	register_orientation.Y = registration_result (1, 3);
+	register_orientation.Z = registration_result (2, 3);
+
+	return icp.hasConverged();
+}
+
+double find_plane_fit(Plane fit_plane, PointCloudXYZptr fit_cloud) {
+
+	double fit_temp=0;
+	double average = 0;
+	vector<double> fit;
+
+	for (int i=0;i<fit_cloud->points.size();i++){
+		fit_temp = fit_cloud->points[i].x * fit_plane.a1 + fit_cloud->points[i].y * fit_plane.a2 + fit_cloud->points[i].z * fit_plane.a3 + fit_plane.b;
+		fit.push_back(fit_temp);
+	}
+	average = accumulate( fit.begin(), fit.end(), 0.0) / fit_cloud->points.size();
+
+	return abs(average);
+
 }
 
 double round_time(double time)

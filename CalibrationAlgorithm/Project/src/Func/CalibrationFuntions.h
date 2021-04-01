@@ -140,6 +140,10 @@ void visualize_planes(vector<Plane> planes);
 
 void visualize_cloud(PointCloudXYZptr cloud);
 
+bool register_clouds(Orientation &register_orientation, Matrix4d &registration_result, PointCloudXYZptr cloud1, PointCloudXYZptr cloud2);
+
+double find_plane_fit(Plane fit_plane, PointCloudXYZptr fit_cloud);
+
 //void find_consensus_planes(vector<Plane> &all_planes);
 
 bool sort_cloud(Plane plane_1, Plane plan_2);
@@ -186,7 +190,7 @@ double check_plane_az(Orientation base_O, Orientation target_O, Plane plane_base
 
 double get_plane_az(Plane test_plane);
 
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vector<RowVectorXd> &point_details, vector<RowVectorXd> &scene_details, vector<RowVectorXd> &plane_details);
+void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details);
 
 vector<Scene> LoadDebugData(string basedir);
 
