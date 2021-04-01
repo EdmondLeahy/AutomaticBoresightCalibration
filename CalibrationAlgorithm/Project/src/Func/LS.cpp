@@ -1,57 +1,9 @@
 #include "LS.h"
 
-//Receives the name of a file "FileName" containing a numerical matrix, and read the matrix data into variable "m"
-//void Read_Mat(char *FileName, MatrixXd& m) {
-//
-//	m.resize(0, 0);
-//
-//	ifstream matfile;
-//	matfile.open(FileName, ios::in); //to open the file and start reading from the beginning
-//	if (matfile.fail()) //check if the file is opened successfully
-//	{
-//		cout << "\nThere was a problem reading the following file: " << endl << FileName << endl;
-//		//exit (EXIT_FAILURE);
-//		return;
-//	}
-//	else {
-//		cout << "\nFile read correctly. Continuing.\n";
-//	}
-//
-//	char* readlinechr = new char[MaxMatSize];
-//	vector<double> v_all;
-//	int nrow = 0;
-//
-//	while (matfile.getline(readlinechr, MaxMatSize, '\n')) {
-//		nrow++;
-//		int stln = strlen(readlinechr);
-//		char* readlinestr = new char[stln + 1];
-//		for (int i = 0; i<stln; i++)
-//		{
-//			readlinestr[i] = readlinechr[i];
-//		}
-//
-//		readlinestr[stln] = '\0';
-//
-//		stringstream rowstream(readlinestr);
-//		double value;
-//		while (!rowstream.eof()) {
-//			rowstream >> value;
-//			v_all.push_back(value);
-//		}
-//	}
-//	matfile.close();
-//
-//	int ncol = v_all.size() / nrow;
-//	m.resize(nrow, ncol);
-//
-//	for (int i = 0; i<nrow; i++) {
-//		for (int j = 0; j<ncol; j++) {
-//			m(i, j) = v_all.at(i*ncol + j);
-//		}
-//	}
-//
-//	return;
-//}
+
+BoresightLS::BoresightLS()
+{
+}
 
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
@@ -69,9 +21,28 @@ void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
 }
 
 
+void BoresightLS::computeA()
+{
+	MatrixXd A1 = MatrixXd::Zero(numLidPts, u);
+	MatrixXd row;
+	//Loop for every lidar point observation
+	for (int i = 0; i<numLidPts; i++) {
+//		computeAPt(u, numPlanes, planeID, scanID,
+//					x0[0], x0[1], x0[2],x0[3], x0[4], x0[5],
+//					plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2),
+//					scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
+//					scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
+//					point_details(i, 0), point_details(i, 1), point_details(i, 2));
+	}
+
+}
+
+void BoresightLS::computefx(){
+	// pass
+}
 
 //Function to compute A
-void computeAandw(MatrixXd& A_full, MatrixXd& A, MatrixXd& H, MatrixXd& w_full, MatrixXd& w, MatrixXd& V, int u, int numPlanes, int numScans, int numLidPts, MatrixXd& bs_params, MatrixXd& plane_details, MatrixXd& scene_details, MatrixXd& point_details, MatrixXd& GNSS_INS_data)
+void BoresightLS::computeAandw()
 {
 	//bs_params: initial approx boresight parameters for entire adjustment. 6 by 1.
 	//x_Sjb y_Sjb z_Sjb w_Sb phi_Sb K_Sb
@@ -100,131 +71,95 @@ void computeAandw(MatrixXd& A_full, MatrixXd& A, MatrixXd& H, MatrixXd& w_full, 
 
 
 	//Loop for scans
-	for (int i = 0; i<numScans; i++) {
-		A1.conservativeResize(A1.rows() + 6, u);
-		A1.block(A1.rows() - 6, 0, 6, u) = computeAScan(u, numPlanes, i);
-
-		w1.conservativeResize(w1.rows() + 6, 1);
-		w1.block(w1.rows() - 6, 0, 6, 1) = computewScan(scene_details(i, 0), scene_details(i, 1), scene_details(i, 2),
-			scene_details(i, 3), scene_details(i, 4), scene_details(i, 5),
-			GNSS_INS_data(i, 0), GNSS_INS_data(i, 1), GNSS_INS_data(i, 2),
-			GNSS_INS_data(i, 3), GNSS_INS_data(i, 4), GNSS_INS_data(i, 5));
-	}
-
-	//cout << endl << A1 << endl << endl;
-
-
-	for (int j = 0; j<numPlanes; j++) {
-		A2.conservativeResize(A2.rows() + 1, u);
-		A2.block(A2.rows() - 1, 0, 1, u) = computeAPlane(u, j, plane_details(j, 0), plane_details(j, 1), plane_details(j, 2));
-
-		w2.conservativeResize(w2.rows() + 1, 1);
-		w2.block(w2.rows() - 1, 0, 1, 1) = computewPlane(plane_details(j, 0), plane_details(j, 1), plane_details(j, 2));
-	}
-	//cout << A2 << endl << endl;
-
-
-	int planeID = 0;
-	int scanID = 0;
-	for (int k = 0; k<numLidPts; k++) {
-
-		A3.conservativeResize(A3.rows() + 1, u);
-		w3.conservativeResize(w3.rows() + 1, 1);
-
-		planeID = point_details(k, 3);
-		scanID = point_details(k, 4);
-
-		A3.block(A3.rows() - 1, 0, 1, u) = computeAPt(u, numPlanes, planeID, scanID,
-			bs_params(0, 0), bs_params(1, 0), bs_params(2, 0),
-			bs_params(3, 0), bs_params(4, 0), bs_params(5, 0),
-			plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2),
-			scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
-			scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
-			point_details(k, 0), point_details(k, 1), point_details(k, 2));
-
-		w3.block(w3.rows() - 1, 0, 1, 1) = computewPt(bs_params(0, 0), bs_params(1, 0), bs_params(2, 0),
-			bs_params(3, 0), bs_params(4, 0), bs_params(5, 0),
-			plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2), plane_details(planeID, 3),
-			scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
-			scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
-			point_details(k, 0), point_details(k, 1), point_details(k, 2));
-	}
-
-	//for debugging
-	//cout << i << "," << j << "," << k << "\n";
-
-
-	//Combine scan rows, plane rows, and column rows into the full A matrix
-	//cout << A_full.rows() << "," << A_full.cols() << "\n";
-	//cout << A1.rows() << "," << A1.cols() << "\n";
-	//cout << A2.rows() << "," << A2.cols() << "\n";
-	//cout << A3.rows() << "," << A3.cols() << "\n";
-	A_full.block(0, 0, A1.rows(), u) = A1;
-	A_full.block(numScans * 6, 0, A2.rows(), u) = A2;
-	A_full.block(numScans * 6 + numPlanes, 0, A3.rows(), u) = A3;
-
-	A.block(0, 0, A1.rows(), u) = A1;
-	A.block(numScans * 6, 0, A3.rows(), u) = A3;
-
-	H = A2;
-
-	A1.resize(0, 0);
-	A2.resize(0, 0);
-	A3.resize(0, 0);
-
-
-	w_full.block(0, 0, w1.rows(), 1) = w1;
-	w_full.block(numScans * 6, 0, w2.rows(), 1) = w2;
-	w_full.block(numScans * 6 + numPlanes, 0, w3.rows(), 1) = w3;
-
-	w.block(0, 0, w1.rows(), 1) = w1;
-	w.block(numScans * 6, 0, w3.rows(), 1) = w3;
-
-	V = w2;
+//	for (int i = 0; i<numScans; i++) {
+//		A1.conservativeResize(A1.rows() + 6, u);
+//		A1.block(A1.rows() - 6, 0, 6, u) = computeAScan(u, numPlanes, i);
+//
+//		w1.conservativeResize(w1.rows() + 6, 1);
+//		w1.block(w1.rows() - 6, 0, 6, 1) = computewScan(scene_details(i, 0), scene_details(i, 1), scene_details(i, 2),
+//			scene_details(i, 3), scene_details(i, 4), scene_details(i, 5),
+//			GNSS_INS_data(i, 0), GNSS_INS_data(i, 1), GNSS_INS_data(i, 2),
+//			GNSS_INS_data(i, 3), GNSS_INS_data(i, 4), GNSS_INS_data(i, 5));
+//	}
+//
+//	//cout << endl << A1 << endl << endl;
+//
+//
+//	for (int j = 0; j<numPlanes; j++) {
+//		A2.conservativeResize(A2.rows() + 1, u);
+//		A2.block(A2.rows() - 1, 0, 1, u) = computeAPlane(u, j, plane_details(j, 0), plane_details(j, 1), plane_details(j, 2));
+//
+//		w2.conservativeResize(w2.rows() + 1, 1);
+//		w2.block(w2.rows() - 1, 0, 1, 1) = computewPlane(plane_details(j, 0), plane_details(j, 1), plane_details(j, 2));
+//	}
+//	//cout << A2 << endl << endl;
+//
+//
+//	int planeID = 0;
+//	int scanID = 0;
+//	for (int k = 0; k<numLidPts; k++) {
+//
+//		A3.conservativeResize(A3.rows() + 1, u);
+//		w3.conservativeResize(w3.rows() + 1, 1);
+//
+//		planeID = point_details(k, 3);
+//		scanID = point_details(k, 4);
+//
+//		A3.block(A3.rows() - 1, 0, 1, u) = computeAPt(u, numPlanes, planeID, scanID,
+//			bs_params(0, 0), bs_params(1, 0), bs_params(2, 0),
+//			bs_params(3, 0), bs_params(4, 0), bs_params(5, 0),
+//			plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2),
+//			scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
+//			scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
+//			point_details(k, 0), point_details(k, 1), point_details(k, 2));
+//
+//		w3.block(w3.rows() - 1, 0, 1, 1) = computewPt(bs_params(0, 0), bs_params(1, 0), bs_params(2, 0),
+//			bs_params(3, 0), bs_params(4, 0), bs_params(5, 0),
+//			plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2), plane_details(planeID, 3),
+//			scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
+//			scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
+//			point_details(k, 0), point_details(k, 1), point_details(k, 2));
+//	}
+//
+//	//for debugging
+//	//cout << i << "," << j << "," << k << "\n";
+//
+//
+//	//Combine scan rows, plane rows, and column rows into the full A matrix
+//	//cout << A_full.rows() << "," << A_full.cols() << "\n";
+//	//cout << A1.rows() << "," << A1.cols() << "\n";
+//	//cout << A2.rows() << "," << A2.cols() << "\n";
+//	//cout << A3.rows() << "," << A3.cols() << "\n";
+//	A_full.block(0, 0, A1.rows(), u) = A1;
+//	A_full.block(numScans * 6, 0, A2.rows(), u) = A2;
+//	A_full.block(numScans * 6 + numPlanes, 0, A3.rows(), u) = A3;
+//
+//	A.block(0, 0, A1.rows(), u) = A1;
+//	A.block(numScans * 6, 0, A3.rows(), u) = A3;
+//
+//	H = A2;
+//
+//	A1.resize(0, 0);
+//	A2.resize(0, 0);
+//	A3.resize(0, 0);
+//
+//
+//	w_full.block(0, 0, w1.rows(), 1) = w1;
+//	w_full.block(numScans * 6, 0, w2.rows(), 1) = w2;
+//	w_full.block(numScans * 6 + numPlanes, 0, w3.rows(), 1) = w3;
+//
+//	w.block(0, 0, w1.rows(), 1) = w1;
+//	w.block(numScans * 6, 0, w3.rows(), 1) = w3;
+//
+//	V = w2;
 
 
 	return;
 }
 
 
-
-//Function to compute 6 rows of A for a scan
-//scanNum is the number of the scan that matches the scan equations
-MatrixXd computeAScan(int u, int numPlanes, int scanNum)
-{
-	MatrixXd A_scan = MatrixXd::Zero(6, u);
-
-	int i = 6 + 4 * numPlanes + 6 * scanNum;
-	int k = 0;
-
-	for (int j = i; k<6; j++) {
-		A_scan(k, j) = 1;
-		k++;
-	}
-
-	return A_scan;
-}
-
-
-
-//Function to compute a row of A for a plane
-//planeNum is the number of the plane that matches the plane equation
-MatrixXd computeAPlane(int u, int planeNum, double n_xpg, double n_ypg, double n_zpg)
-{
-	MatrixXd A_plane = MatrixXd::Zero(1, u);
-
-	int i = 6 + 4 * planeNum;
-
-	A_plane(0, i) = 2 * n_xpg;
-	A_plane(0, i + 1) = 2 * n_ypg;
-	A_plane(0, i + 2) = 2 * n_zpg;
-
-	return A_plane;
-}
-
-
 //Function to compute elements of a rotation matrix, image to object rotation
-MatrixXd RotMatElements(double w, double phi, double K)
+MatrixXd BoresightLS::RotMatElements(double w, double phi, double K)
 {
 	MatrixXd Rotw(3, 3);
 	MatrixXd Rotphi(3, 3);
@@ -251,7 +186,7 @@ MatrixXd RotMatElements(double w, double phi, double K)
 
 
 //Function to compute the derivatives of a point equation wrt rotation matrix elements for Rbjg
-MatrixXd PtEqnWrtRotbjg(double x_Sjb, double y_Sjb, double z_Sjb, double w_Sb, double phi_Sb, double K_Sb, double x_sj, double y_sj, double z_sj, double n_xpg, double n_ypg, double n_zpg)
+MatrixXd BoresightLS::PtEqnWrtRotbjg(double x_Sjb, double y_Sjb, double z_Sjb, double w_Sb, double phi_Sb, double K_Sb, double x_sj, double y_sj, double z_sj, double n_xpg, double n_ypg, double n_zpg)
 {
 	MatrixXd Dbjg1(9, 1);
 
@@ -283,7 +218,7 @@ MatrixXd PtEqnWrtRotbjg(double x_Sjb, double y_Sjb, double z_Sjb, double w_Sb, d
 
 
 //Function to compute the derivatives of a point equation wrt rotation matrix elements for RSb
-MatrixXd PtEqnWrtRotSb(double w_bjg, double phi_bjg, double K_bjg, double x_sj, double y_sj, double z_sj, double n_xpg, double n_ypg, double n_zpg)
+MatrixXd BoresightLS::PtEqnWrtRotSb(double w_bjg, double phi_bjg, double K_bjg, double x_sj, double y_sj, double z_sj, double n_xpg, double n_ypg, double n_zpg)
 {
 	MatrixXd DSb1(9, 1);
 
@@ -312,10 +247,20 @@ MatrixXd PtEqnWrtRotSb(double w_bjg, double phi_bjg, double K_bjg, double x_sj, 
 	return DSb1;
 }
 
+void BoresightLS::setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane_details_in, MatrixXd scene_details_in) {
+	point_details = point_details_in;
+	plane_details = plane_details_in;
+	scene_details = scene_details_in;
 
+	numLidPts = point_details.rows();
+	numPlanes = plane_details.rows();
+	numScenes = scene_details.rows();
+
+	u = 6 + 4*numPlanes;
+}
 
 //Function to compute derivatives of rotation matrix elements wrt rotation angles
-MatrixXd RotWrtAngles(double w, double phi, double K)
+MatrixXd BoresightLS::RotWrtAngles(double w, double phi, double K)
 {
 	MatrixXd D = MatrixXd::Zero(9, 3);
 
@@ -365,48 +310,47 @@ MatrixXd RotWrtAngles(double w, double phi, double K)
 
 //Function to compute a row of A for a point
 //pointNum is the number of a point that matches the point equation
-MatrixXd computeAPt(int u, int numPlanes, int planeNum, int scanNum,
-	double x_Sjb, double y_Sjb, double z_Sjb,
-	double w_Sb, double phi_Sb, double K_Sb,
-	double n_xpg, double n_ypg, double n_zpg,
-	double x_bjg, double y_bjg, double z_bjg,
-	double w_bjg, double phi_bjg, double K_bjg,
-	double x_sj, double y_sj, double z_sj)
+MatrixXd BoresightLS::computeAPt(int pt_index)
+
+//int u, int numPlanes, int planeNum, int scanNum,
+//	double x_Sjb, double y_Sjb, double z_Sjb,
+//	double w_Sb, double phi_Sb, double K_Sb,
+//	double n_xpg, double n_ypg, double n_zpg,
+//	double x_bjg, double y_bjg, double z_bjg,
+//	double w_bjg, double phi_bjg, double K_bjg,
+//	double x_sj, double y_sj, double z_sj)
 {
+	// EOP of scene:
+	int sceneNum = point_details(pt_index,4);
+	double x_Sjb = scene_details(sceneNum,0); // X
+	double y_Sjb = scene_details(sceneNum,1); // Y
+	double z_Sjb = scene_details(sceneNum,2); // Z
+	double w_Sb = scene_details(sceneNum,3); // Omega
+	double phi_Sb = scene_details(sceneNum,4); // Phi
+	double K_Sb = scene_details(sceneNum,5); // Kappa
+
+	// Boresight parameters
+	double x_bjg = x0[0]; // x
+	double y_bjg = x0[1]; // y
+	double z_bjg = x0[2]; // z
+	double w_bjg = x0[3]; // omega
+	double phi_bjg = x0[4]; // phi
+	double K_bjg = x0[5]; // kappa
+
+	// Point parameters
+	double x_sj = point_details(pt_index,0); // x
+	double y_sj = point_details(pt_index,1); // y
+	double z_sj = point_details(pt_index,2); // z
+
+	// Plane parameters (note, we don't need d here as the derivative is 1)
+	int planeNum = point_details(pt_index,3);
+	double n_xpg = plane_details(planeNum,0); // n1
+	double n_ypg = plane_details(planeNum,1); // n2
+	double n_zpg = plane_details(planeNum,2); // n3
+
+
+	// Unknows = [6 boresight, 4*number of planes]
 	MatrixXd A_point = MatrixXd::Zero(1, u);
-
-
-	/* //Compute elements of Rbjg and RSb rotation angles
-
-	//Rbjg
-	double Rbjg_11 = cosd(K_bjg)*cosd(phi_bjg);
-	double Rbjg_12_term1 = cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg);
-	double Rbjg_12_term2 = sind(K_bjg)*cosd(w_bjg);
-	double Rbjg_13_term1 = sind(K_bjg)*sind(w_bjg);
-	//double Rbjg_13_term2 = Rbjg_22_term1*sind(phi_bjg);
-	double Rbjg_21 = sind(K_bjg)*cosd(phi_bjg);
-	double Rbjg_22_term1 = cosd(K_bjg)*cosd(w_bjg);
-	double Rbjg_22_term2 = sind(K_bjg)*sind(phi_bjg)*sind(w_bjg);
-	//Rbjg_23_term1 = Rbjg_12_term2*sind(phi_bjg);
-	//Rbjg_23_term2 = cosd(K_bjg)*sind(w_bjg);
-	//Rbjg_31 = -sind(phi_bjg);
-	double Rbjg_32 = cosd(phi_bjg)*sind(w_bjg);
-	double Rbjg_33 = cosd(phi_bjg)*cosd(w_bjg);
-
-	//RSb
-	//RSb_11 = cosd(K_Sb)*cosd(phi_Sb);
-	double RSb_12_term1 = cosd(K_Sb)*sind(phi_Sb)*sind(w_Sb);
-	double RSb_12_term2 = sind(K_Sb)*cosd(w_Sb);
-	double RSb_13_term1 = sind(K_Sb)*sind(w_Sb);
-	//double RSb_13_term2 = RSb_22_term1*sind(phi_Sb);
-	double RSb_21 = sind(K_Sb)*cosd(phi_Sb);
-	double RSb_22_term1 = cosd(K_Sb)*cosd(w_Sb);
-	double RSb_22_term2 = sind(K_Sb)*sind(phi_Sb)*sind(w_Sb);
-	//RSb_23_term1 = RSb_12_term2*sind(phi_Sb);
-	//RSb_23_term2 = cosd(K_Sb)*sind(w_Sb);
-	//RSb_31 = -sind(phi_Sb);
-	double RSb_32 = cosd(phi_Sb)*sind(w_Sb);
-	double RSb_33 = cosd(phi_Sb)*cosd(w_Sb); */
 
 
 	//6 Boresight parameters
@@ -457,70 +401,15 @@ MatrixXd computeAPt(int u, int numPlanes, int planeNum, int scanNum,
 					+ sind(K_Sb)*cosd(w_Sb)*sind(phi_Sb))) + z_sj*(sind(phi_Sb)*(sind(K_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
 						- cosd(phi_Sb)*sind(w_Sb)*(cosd(K_bjg)*sind(w_bjg) + sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
 						+ cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)*cosd(w_bjg)) + z_Sjb*cosd(phi_bjg)*cosd(w_bjg));
-	/*A_point(0, i) = 0.5;
-	A_point(0, i + 1) = 0.4;
-	A_point(0, i + 2) = 0.1;*/
+
 	A_point(0, i + 3) = 1;
 
-
-
-	//6 scan parameters
-	int j = 6 + 4 * numPlanes + 6 * scanNum;
-
-	A_point(0, j) = n_xpg;
-
-	A_point(0, j + 1) = n_ypg;
-
-	A_point(0, j + 2) = n_zpg;
-
-	MatrixXd S_PtWrtRot = PtEqnWrtRotbjg(x_Sjb, y_Sjb, z_Sjb, w_Sb, phi_Sb, K_Sb, x_sj, y_sj, z_sj, n_xpg, n_ypg, n_zpg);
-
-	MatrixXd S_RotWrtAng = RotWrtAngles(w_bjg, phi_bjg, K_bjg);
-
-	A_point.block(0, j + 3, 1, 3) = S_PtWrtRot.transpose()*S_RotWrtAng;
-
-	S_PtWrtRot.resize(0, 0);
-	S_RotWrtAng.resize(0, 0);
-
-
-	//cout << A_point << endl << endl;
 
 	return A_point;
 }
 
 
-
-MatrixXd computewScan(double x_bjg, double y_bjg, double z_bjg,
-	double w_bjg, double phi_bjg, double K_bjg,
-	double x_GPS, double y_GPS, double z_GPS,
-	double w_INS, double phi_INS, double K_INS)
-{
-	MatrixXd w1(6, 1);
-
-	w1(0, 0) = x_bjg - x_GPS;
-	w1(1, 0) = y_bjg - y_GPS;
-	w1(2, 0) = z_bjg - z_GPS;
-	w1(3, 0) = w_bjg - w_INS;
-	w1(4, 0) = phi_bjg - phi_INS;
-	w1(5, 0) = K_bjg - K_INS;
-
-	return w1;
-}
-
-
-
-MatrixXd computewPlane(double n_xpg, double n_ypg, double n_zpg)
-{
-	MatrixXd w2(1, 1);
-
-	w2(0, 0) = pow(n_xpg, 2) + pow(n_ypg, 2) + pow(n_zpg, 2) - 1;
-
-	return w2;
-}
-
-
-
-MatrixXd computewPt(double x_Sjb, double y_Sjb, double z_Sjb,
+MatrixXd BoresightLS::computewPt(double x_Sjb, double y_Sjb, double z_Sjb,
 	double w_Sb, double phi_Sb, double K_Sb,
 	double n_xpg, double n_ypg, double n_zpg, double d_p,
 	double x_bjg, double y_bjg, double z_bjg,
@@ -528,38 +417,6 @@ MatrixXd computewPt(double x_Sjb, double y_Sjb, double z_Sjb,
 	double x_sj, double y_sj, double z_sj)
 {
 	MatrixXd w3(1, 1);
-
-	//Compute elements of Rbjg and RSb rotation angles
-
-	//Rbjg
-	/* 	double Rbjg_11 = cosd(K_bjg)*cosd(phi_bjg);
-	double Rbjg_12_term1 = cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg);
-	double Rbjg_12_term2 = sind(K_bjg)*cosd(w_bjg);
-	double Rbjg_13_term1 = sind(K_bjg)*sind(w_bjg);
-	//double Rbjg_13_term2 = Rbjg_22_term1*sind(phi_bjg);
-	double Rbjg_21 = sind(K_bjg)*cosd(phi_bjg);
-	double Rbjg_22_term1 = cosd(K_bjg)*cosd(w_bjg);
-	double Rbjg_22_term2 = sind(K_bjg)*sind(phi_bjg)*sind(w_bjg);
-	//Rbjg_23_term1 = Rbjg_12_term2*sind(phi_bjg);
-	//Rbjg_23_term2 = cosd(K_bjg)*sind(w_bjg);
-	//Rbjg_31 = -sind(phi_bjg);
-	double Rbjg_32 = cosd(phi_bjg)*sind(w_bjg);
-	double Rbjg_33 = cosd(phi_bjg)*cosd(w_bjg);
-
-	//RSb
-	//RSb_11 = cosd(K_Sb)*cosd(phi_Sb);
-	double RSb_12_term1 = cosd(K_Sb)*sind(phi_Sb)*sind(w_Sb);
-	double RSb_12_term2 = sind(K_Sb)*cosd(w_Sb);
-	double RSb_13_term1 = sind(K_Sb)*sind(w_Sb);
-	//double RSb_13_term2 = RSb_22_term1*sind(phi_Sb);
-	double RSb_21 = sind(K_Sb)*cosd(phi_Sb);
-	double RSb_22_term1 = cosd(K_Sb)*cosd(w_Sb);
-	double RSb_22_term2 = sind(K_Sb)*sind(phi_Sb)*sind(w_Sb);
-	//RSb_23_term1 = RSb_12_term2*sind(phi_Sb);
-	//RSb_23_term2 = cosd(K_Sb)*sind(w_Sb);
-	//RSb_31 = -sind(phi_Sb);
-	double RSb_32 = cosd(phi_Sb)*sind(w_Sb);
-	double RSb_33 = cosd(phi_Sb)*cosd(w_Sb); */
 
 
 	w3(0, 0) = (d_p + n_ypg*(y_bjg + x_Sjb*(sin(K_bjg)*cos(w_bjg) + cos(K_bjg)*sin(phi_bjg)*sin(w_bjg)) + y_Sjb*(cos(K_bjg)*cos(w_bjg)

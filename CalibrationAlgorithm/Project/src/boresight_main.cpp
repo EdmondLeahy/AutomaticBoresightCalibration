@@ -3,11 +3,6 @@
 //#include "BAFunctions.h"
 
 
-//#include <iostream>
-//#include <pcl/io/pcd_io.h>
-//#include <pcl/point_types.h>
-//#include <pcl/registration/icp.h>
-
 
 
 int main() {
@@ -45,26 +40,40 @@ int main() {
 
 	cout << "Finished loading debug scenes\n";
 
-	//Get the Shiftdown for distance measurement simplification
+	//Get the Shiftdown for distance measurement simplification (If doing geolation later, must revert this!)
 	vector<double> shiftdown;
 	find_apply_shiftdown(scenes, shiftdown);
 
 	cout << "\n-------------------------Finished finding planes -------------------------------------------------------\n";
 	cout << "Matching planes....\n";
-	// TODO: MATCH PLANES
+	// TODO: MATCH PLANESgit
 	UniquePlanes unique_planes = match_scenes(scenes);
 	cout << "Done.\nRemoving infrequent planes....";
-	cout << "\n\nMapping vector PRE REMOVE:\n";
-	print_vector(unique_planes.mapping_vec);
 	//Remove less frequent planes.
 	int num_removed = remove_unfrequent(unique_planes);
-	cout << "\n\nDone. Removed " << num_removed << " infrequent planes.\n";
+	cout << "Done.\n";
 
-	cout << "\n\nMapping vector POST REMOVE:\n";
-	print_vector(unique_planes.mapping_vec);
+//	cout << "\n\nMapping vector POST REMOVE:\n";
+//	print_vector(unique_planes.mapping_vec);
+
+	// Create observation for estimations
+	MatrixXd point_details = MatrixXd::Zero(1,1);
+	MatrixXd scene_details = MatrixXd::Zero(1,1);
+	MatrixXd plane_details = MatrixXd::Zero(1,1);
+	create_bundle_observations(scenes, unique_planes, point_details, scene_details, plane_details);
+
+	print_matrix(plane_details);
+
+	// ------------------------------------------------------------------------------------------------------------------------------
+	//									Least Squares
+
+	BoresightLS boresight_adjustment;
+
+	//input the observations
+//	boresight_adjustment.setAdjustmentDetails(point_details, scene_details, plane_details);
 
 
-	cout << "\n\n FINISHED CALIBRATION\n\n";
+	clog << "\n\n FINISHED CALIBRATION\n\n";
 
 	cin.get();
 	return(0);

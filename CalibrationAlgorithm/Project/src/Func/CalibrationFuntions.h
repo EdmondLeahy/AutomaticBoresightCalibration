@@ -166,7 +166,7 @@ void print_vector(vector<RowVector3d> print_vector);
 void print_vector(vector<RowVectorXd> print_vector);
 void print_vector(vector<int> print_vector); 
 void print_vector(vector<RowVectorXd> print_vector, char *filename);
-void print_matrix(MatrixXd print_mat);
+//void print_matrix(MatrixXd print_mat);
 
 void print_cloud(PointCloudXYZptr cloud);
 
@@ -190,7 +190,7 @@ double check_plane_az(Orientation base_O, Orientation target_O, Plane plane_base
 
 double get_plane_az(Plane test_plane);
 
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vector<RowVectorXd> &point_details, vector<RowVectorXd> &scene_details, vector<RowVectorXd> &plane_details);
+void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details);
 
 vector<Scene> LoadDebugData(string basedir);
 

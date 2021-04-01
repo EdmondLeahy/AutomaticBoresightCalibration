@@ -619,6 +619,7 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 			*registration_cloud += *registration_scene.planes[j].points_on_plane;
 		}
 		// find the azimuth difference between the clouds (just to get close for ICP)
+		// TODO: use the initial boresight estimate for this! What if the sensor is on it's side?
 		az_diff = base_scene.scene_orientation.kappa - scenes[i].scene_orientation.kappa;
 		// create the rotation matrix
 		Rotation_g2i(0,0,-az_diff, temp_rot);
@@ -636,7 +637,7 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 			// for each plane in the target scene, rotate using the registration values and check planes
 			for (int j = 0;j<registration_scene.planes.size(); j++){
 
-				best_fit = 1000; // This acts as a threshold!
+				best_fit = 10; // This acts as a threshold!
 				best_fit_plane = -1;
 				mapping_temp = RowVector3d::Identity();
 				// Rotate plane for azimuth delta
@@ -668,8 +669,6 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 
 				}
 
-				cout << "Mapping vec:\n";
-				print_vector(unique.mapping_vec);
 			}
 		}
 	}
@@ -727,20 +726,20 @@ void print_vector(vector<RowVectorXd> print_vector, char *filename)
 
 	}
 }
-
-void print_matrix(MatrixXd print_mat)
-{
-
-	for (int i = 0; i < print_mat.rows(); i++)
-	{
-		for (int j = 0; j < print_mat.cols(); j++)
-		{
-			printf("\t %0.3f ", print_mat(i,j));
-		}
-		printf("\n");
-
-	}
-}
+//
+//void print_matrix(MatrixXd print_mat)
+//{
+//
+//	for (int i = 0; i < print_mat.rows(); i++)
+//	{
+//		for (int j = 0; j < print_mat.cols(); j++)
+//		{
+//			printf("\t %0.3f ", print_mat(i,j));
+//		}
+//		printf("\n");
+//
+//	}
+//}
 
 void print_vector(vector<RowVectorXd> print_vector)
 {
@@ -1151,11 +1150,12 @@ MatrixXd merge_data(MatrixXd IE_data, MatrixXd lidar_data, double time)
 	return output;
 
 }
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vector<RowVectorXd> &point_details, vector<RowVectorXd> &scene_details, vector<RowVectorXd> &plane_details)
+void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details)
 {
 	//This function makes the three Bundle Adjustment observation vectors
 
 	RowVectorXd points_row(5), planes_row(4), scene_row(6);
+	vector<RowVectorXd> temp_pts;
 	Scene temp_scene;
 	double x, y, z;
 
@@ -1163,7 +1163,6 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vecto
 	//	This vector contains the details of each point in the adjustment. Each of these points are from a scene, 
 	//	and lie on one of the unique planes
 	//	| X | Y | Z | Unique Plane | Scene | 
-
 	for (int i = 0; i < unique.mapping_vec.size(); i++)
 	{
 		temp_scene = scenes[unique.mapping_vec[i](1)];
@@ -1173,26 +1172,41 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, vecto
 			y = temp_scene.planes[unique.mapping_vec[i](2)].points_on_plane->points[j].y;
 			z = temp_scene.planes[unique.mapping_vec[i](2)].points_on_plane->points[j].z;
 			points_row << x, y, z, unique.mapping_vec[i](0), unique.mapping_vec[i](1);
-			point_details.push_back(points_row);
+			temp_pts.push_back(points_row);
+		}
+	}
+	//convert to Matrix
+	point_details = MatrixXd::Zero(temp_pts.size(),5);
+	for(int i=0;i<temp_pts.size();i++)
+	{
+		for(int j=0;j<5;j++){
+			point_details(i,j) = temp_pts[i](j);
 		}
 	}
 
 	//Plane Details
+	plane_details = MatrixXd::Zero(unique.unique_planes.size(),4);
 	//	This vector contains the details of each unique plane in the scenes.
 	//	| A1 | A2 | A3 | B | 
 	for (int i = 0; i < unique.unique_planes.size(); i++)
 	{
-		planes_row << unique.unique_planes[i].a1, unique.unique_planes[i].a2, unique.unique_planes[i].a3, unique.unique_planes[i].b;
-		plane_details.push_back(planes_row);
+		plane_details(i,0) = unique.unique_planes[i].a1;
+		plane_details(i,1) = unique.unique_planes[i].a2, unique.unique_planes[i].a3;
+		plane_details(i,2) = unique.unique_planes[i].b;
 	}
 
 	//Scene Details
+	scene_details = MatrixXd::Zero(scenes.size(),6);
 	//	This vector contains the details of each scene orientation details.
 	//	| X | Y | Z | Omega | Phi | Kappa |
 	for (int i = 0; i < scenes.size(); i++)
 	{
-		scene_row << scenes[i].scene_orientation.X, scenes[i].scene_orientation.Y, scenes[i].scene_orientation.Z, scenes[i].scene_orientation.omega, scenes[i].scene_orientation.phi, scenes[i].scene_orientation.kappa;
-		scene_details.push_back(scene_row);
+		scene_details(i,0) = scenes[i].scene_orientation.X;
+		scene_details(i,0) = scenes[i].scene_orientation.Y;
+		scene_details(i,0) = scenes[i].scene_orientation.Z;
+		scene_details(i,0) = scenes[i].scene_orientation.omega;
+		scene_details(i,0) = scenes[i].scene_orientation.phi;
+		scene_details(i,0) = scenes[i].scene_orientation.kappa;
 	}
 
 
