@@ -68,16 +68,19 @@ int main() {
 
 	// Set the approximate values for the boresight parameters (given by NovAtel):
 	x0(0) = -0.661; // x
-	x0(0) = -0.272; // y
-	x0(0) = -1.4158; // z
-	x0(0) = 180; // omega
-	x0(0) = 0; // phi
-	x0(0) = 90; // kappa
+	x0(1) = -0.272; // y
+	x0(2) = -1.4158; // z
+	x0(3) = 180; // omega
+	x0(4) = 0; // phi
+	x0(5) = 90; // kappa
 
 	//input the observations
-	boresight_adjustment.setAdjustmentDetails(point_details, scene_details, plane_details, x0);
+	boresight_adjustment.setAdjustmentDetails(point_details, plane_details, scene_details, x0);
+	boresight_adjustment.debug();
+	boresight_adjustment.computeLS();
 
 
+	cout << "\n\nThe mean is: " << boresight_adjustment.getw().mean() << endl;
 	clog << "\n\n FINISHED CALIBRATION\n\n";
 
 	cin.get();

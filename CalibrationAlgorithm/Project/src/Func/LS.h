@@ -3,6 +3,7 @@
 #endif
 
 #include "LeastSquares.h"
+//#include "CalibrationFunctions.h"
 
 #include <iostream>
 #include <stdio.h>
@@ -74,6 +75,8 @@ private:
 
 };
 
+
+void Rotation_g2i(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols);

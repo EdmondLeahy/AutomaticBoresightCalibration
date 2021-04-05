@@ -5,6 +5,29 @@ BoresightLS::BoresightLS()
 {
 }
 
+
+void Rotation_g2i(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) {
+	MatrixXd Mw0 = MatrixXd::Zero(3,3);
+	MatrixXd Mf0 = MatrixXd::Zero(3,3);
+	MatrixXd Mk0 = MatrixXd::Zero(3,3);
+
+	// compute R_g_to_i and return it to the Rot_g2i
+
+	Mw0 << 1, 0, 0,
+		0, cosd(Omega), sind(Omega),
+		0, -sind(Omega), cosd(Omega);
+
+	Mf0 << cosd(Phi), 0, -sind(Phi),
+		0, 1, 0,
+		sind(Phi), 0, cosd(Phi);
+
+	Mk0 << cosd(Kappa), sind(Kappa), 0,
+		-sind(Kappa), cosd(Kappa), 0,
+		0, 0, 1;
+
+	Rot_g2i = Mk0 * Mf0*Mw0;
+};
+
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
 {
@@ -39,6 +62,55 @@ void BoresightLS::computeA()
 
 void BoresightLS::computefx(){
 	// pass
+	VectorXd eop_i = VectorXd::Zero(3);
+	MatrixXd R_eop_i = MatrixXd::Zero(3,3);
+	VectorXd r_b = VectorXd::Zero(3);
+	MatrixXd R_b = MatrixXd::Zero(3,3);
+	VectorXd n_i = VectorXd::Zero(3);
+	VectorXd p_i = VectorXd::Zero(3);
+	int unique_pane, scene;
+	double d_i;
+	// Initial size of Fx
+	fx = VectorXd::Zero(numLidPts);
+
+	// Set the vector, matrix for Boresight (same every iteration)
+	r_b(0) = x0(0); //X
+	r_b(1) = x0(1); //Y
+	r_b(2) = x0(2); //Z
+	Rotation_g2i(x0(3),x0(4),x0(5),R_b);
+
+	cout << point_details << endl;
+	cout << scene_details << endl;
+	cout << plane_details << endl;
+
+
+	for(int i=0;i<numLidPts;i++){
+		unique_pane = point_details(i,3);
+		scene = point_details(i,4);
+
+		// Set the OEP for this point
+		eop_i(0) = scene_details(scene,0); //X
+		eop_i(1) = scene_details(scene,1); //Y
+		eop_i(2) = scene_details(scene,2); //Z
+		Rotation_g2i(scene_details(scene,3),scene_details(scene,4),scene_details(scene,5),R_eop_i);
+
+		// Set the vector for plane details
+		n_i(0) = plane_details(unique_pane,0); //n1
+		n_i(1) = plane_details(unique_pane,1); //n2
+		n_i(2) = plane_details(unique_pane,2); //n3
+		d_i = plane_details(unique_pane,3); //d
+
+		// Set the point vector for iteration
+		p_i(0) = point_details(i,0); //x
+		p_i(1) = point_details(i,1); //y
+		p_i(2) = point_details(i,2); //z
+
+		// do matrix math
+
+		fx(i) = (eop_i + R_eop_i*r_b + R_eop_i*R_b*p_i).transpose()*n_i + d_i;
+
+	}
+
 }
 
 //Function to compute A

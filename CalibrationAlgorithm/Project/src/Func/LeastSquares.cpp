@@ -230,9 +230,10 @@ void LeastSquares::computeLS()
 	r = computeRank(A);
 	computeP();
 
-//	cout << "A:\n" << A << endl;
+	cout << "A:\n" << A << endl;
 //	cout << "Cl:\n" << Cl << endl;
 
+	cout << "Shape of A: " << A.rows() << " X " << A.cols() << endl;
 //	print_matrix(Cl);
 //	print_matrix(A);
 //	print_matrix(P);

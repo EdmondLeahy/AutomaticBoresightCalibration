@@ -1203,11 +1203,11 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, Matri
 	for (int i = 0; i < scenes.size(); i++)
 	{
 		scene_details(i,0) = scenes[i].scene_orientation.X;
-		scene_details(i,0) = scenes[i].scene_orientation.Y;
-		scene_details(i,0) = scenes[i].scene_orientation.Z;
-		scene_details(i,0) = scenes[i].scene_orientation.omega;
-		scene_details(i,0) = scenes[i].scene_orientation.phi;
-		scene_details(i,0) = scenes[i].scene_orientation.kappa;
+		scene_details(i,1) = scenes[i].scene_orientation.Y;
+		scene_details(i,2) = scenes[i].scene_orientation.Z;
+		scene_details(i,3) = scenes[i].scene_orientation.omega;
+		scene_details(i,4) = scenes[i].scene_orientation.phi;
+		scene_details(i,5) = scenes[i].scene_orientation.kappa;
 	}
 
 
