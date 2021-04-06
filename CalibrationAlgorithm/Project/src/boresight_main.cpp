@@ -74,12 +74,19 @@ int main() {
 	x0(4) = 0; // phi
 	x0(5) = 90; // kappa
 
+	MatrixXd temp_cl = MatrixXd::Ones(point_details.rows(),1);
+
 	//input the observations
+	boresight_adjustment.setIter(5);
+	boresight_adjustment.setTol(1.0e-5);
 	boresight_adjustment.setAdjustmentDetails(point_details, plane_details, scene_details, x0);
-	boresight_adjustment.debug();
-	boresight_adjustment.computeLS();
+	boresight_adjustment.setP(temp_cl);
+//	boresight_adjustment.computeA();
+//	cout << boresight_adjustment.A << endl;
+	boresight_adjustment.iterate();
 
-
+	cout << "\n\nThe x0 is: " << x0 << endl;
+	cout << "\n\nThe xh is: " << boresight_adjustment.getxh() << endl;
 	cout << "\n\nThe mean is: " << boresight_adjustment.getw().mean() << endl;
 	clog << "\n\n FINISHED CALIBRATION\n\n";
 

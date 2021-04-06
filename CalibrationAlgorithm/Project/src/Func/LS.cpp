@@ -46,16 +46,13 @@ void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
 
 void BoresightLS::computeA()
 {
-	MatrixXd A1 = MatrixXd::Zero(numLidPts, u);
-	MatrixXd row;
+	A = MatrixXd::Zero(numLidPts, u);
+	MatrixXd row = MatrixXd::Zero(1,u);
+//	MatrixXd row = MatrixXd::Zero(1,u);
 	//Loop for every lidar point observation
 	for (int i = 0; i<numLidPts; i++) {
-//		computeAPt(u, numPlanes, planeID, scanID,
-//					x0[0], x0[1], x0[2],x0[3], x0[4], x0[5],
-//					plane_details(planeID, 0), plane_details(planeID, 1), plane_details(planeID, 2),
-//					scene_details(scanID, 0), scene_details(scanID, 1), scene_details(scanID, 2),
-//					scene_details(scanID, 3), scene_details(scanID, 4), scene_details(scanID, 5),
-//					point_details(i, 0), point_details(i, 1), point_details(i, 2));
+		row = computeAPt(i);
+		A.block(i, 0, 1, u) = row;
 	}
 
 }
@@ -78,11 +75,6 @@ void BoresightLS::computefx(){
 	r_b(1) = x0(1); //Y
 	r_b(2) = x0(2); //Z
 	Rotation_g2i(x0(3),x0(4),x0(5),R_b);
-
-	cout << point_details << endl;
-	cout << scene_details << endl;
-	cout << plane_details << endl;
-
 
 	for(int i=0;i<numLidPts;i++){
 		unique_pane = point_details(i,3);

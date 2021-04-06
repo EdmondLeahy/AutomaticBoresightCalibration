@@ -87,7 +87,7 @@ void LeastSquares::setCl(const MatrixXd & Cl_diag)
 
 void LeastSquares::setP(const VectorXd diag_p)
 {
-	P = diag_p.diagonal();
+	P = diag_p.asDiagonal();
 }
 
 void LeastSquares::setA(const MatrixXd & A_temp)
@@ -230,10 +230,10 @@ void LeastSquares::computeLS()
 	r = computeRank(A);
 	computeP();
 
-	cout << "A:\n" << A << endl;
+//	cout << "A:\n" << A << endl;
 //	cout << "Cl:\n" << Cl << endl;
 
-	cout << "Shape of A: " << A.rows() << " X " << A.cols() << endl;
+//	cout << "Shape of A: " << A.rows() << " X " << A.cols() << endl;
 //	print_matrix(Cl);
 //	print_matrix(A);
 //	print_matrix(P);
@@ -245,9 +245,9 @@ void LeastSquares::computeLS()
 	updateUnknowns();
 	computeResiduals();
 	computeaPost();
-	computeClh();
-	computeCxh();
-	updateObservations();
+//	computeClh();
+//	computeCxh();
+//	updateObservations();
 
 	if (isquiet != true && isdebug) {
 		//TESTING
@@ -261,8 +261,8 @@ void LeastSquares::computeLS()
 //		cout << "Cl:\n" << Cl << endl;
 //		cout << "N:\n" << N << endl;
 //		cout << "U:\n" << U << endl;
-		cout << "n: " << n << endl;
-		cout << "u: " << u << endl;
+//		cout << "n: " << n << endl;
+//		cout << "u: " << u << endl;
 	}
 	cout << "FINISHED\n";
 
@@ -325,17 +325,17 @@ void LeastSquares::iterate()
 
 	
 	computeResiduals();//vh
-	updateObservations();//lh
-	computeaPost();//Apost
-	computeCxh();//Cx
-
-	
-	computeClh();//Clh
-	computeCvh();
-	computeErrorEllipse(Cxh);
-	if (snoop){
-		dataSnoop();
-	}
+//	updateObservations();//lh
+//	computeaPost();//Apost
+//	computeCxh();//Cx
+//
+//
+//	computeClh();//Clh
+//	computeCvh();
+//	computeErrorEllipse(Cxh);
+//	if (snoop){
+//		dataSnoop();
+//	}
 
 
 
@@ -463,7 +463,9 @@ double LeastSquares::computeCondition(MatrixXd & M)
 
 void LeastSquares::computeP()
 {
-	P = pow(aprior,2) * Cl.inverse();
+	if (P.rows() < 1){
+		P = pow(aprior,2) * Cl.inverse();
+	}
 }
 
 void LeastSquares::computeU()
@@ -475,7 +477,7 @@ void LeastSquares::computeU()
 void LeastSquares::computeN()
 {
 	N = A.transpose() * P * A;
-	print_matrix(N);
+//	print_matrix(N);
 	computeNi();
 
 }
@@ -505,7 +507,7 @@ void LeastSquares::computeResiduals()
 void LeastSquares::computeMisclosure()
 {
 	computefx();
-	w = l-fx;
+	w = -fx;
 }
 
 void LeastSquares::computeDelta()
