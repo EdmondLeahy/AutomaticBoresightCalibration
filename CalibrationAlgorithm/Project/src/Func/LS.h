@@ -76,11 +76,17 @@ private:
 };
 
 
-void Rotation_g2i(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
+void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols);
 
+
+VectorXd bring_to_ground(VectorXd eop, VectorXd x0, VectorXd n);
+VectorXd bring_plane_to_ground(VectorXd eop, VectorXd x0, VectorXd n);
+
+
+double get_plane_d(VectorXd n_plane);
 
 //Function to compute 6 rows of A for a scan
 MatrixXd computeAScan(int u, int numPlanes, int scanNum);

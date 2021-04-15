@@ -116,7 +116,7 @@ void Read_Mat(char *FileName, MatrixXd& m);//reads a formatted file to a matrix
 
 void Write_Mat(char *FileName, MatrixXd & m, int decimal_precision); //writes a matrix to a formatted file
 
-void Rotation_g2i(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
+void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 void Convert_R_to_Angles(Matrix3b3 R, double& Omega, double& Phi, double& Kappa); //Takes 3x3 matrix, makes 3 Anges
 
@@ -165,6 +165,7 @@ int remove_unfrequent(UniquePlanes &unique, int threshold=3);
 void print_vector(vector<RowVector3d> print_vector);
 void print_vector(vector<RowVectorXd> print_vector);
 void print_vector(vector<int> print_vector); 
+void print_vector(vector<double> print_vector);
 void print_vector(vector<RowVectorXd> print_vector, char *filename);
 //void print_matrix(MatrixXd print_mat);
 
@@ -190,7 +191,7 @@ double check_plane_az(Orientation base_O, Orientation target_O, Plane plane_base
 
 double get_plane_az(Plane test_plane);
 
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details);
+void create_bundle_observations(VectorXd &x0, vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details);
 
 vector<Scene> LoadDebugData(string basedir);
 
@@ -200,4 +201,7 @@ Orientation get_debug_orientation(char *filename);
 void get_hour_day(double GPS_time, double *hour, int *day);
 
 double round_time(double time);
+
+double get_plane_d(PointCloudXYZ pop, VectorXd plane_params);
+
 #endif

@@ -6,7 +6,7 @@ BoresightLS::BoresightLS()
 }
 
 
-void Rotation_g2i(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) {
+void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) {
 	MatrixXd Mw0 = MatrixXd::Zero(3,3);
 	MatrixXd Mf0 = MatrixXd::Zero(3,3);
 	MatrixXd Mk0 = MatrixXd::Zero(3,3);
@@ -14,15 +14,15 @@ void Rotation_g2i(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) {
 	// compute R_g_to_i and return it to the Rot_g2i
 
 	Mw0 << 1, 0, 0,
-		0, cosd(Omega), sind(Omega),
-		0, -sind(Omega), cosd(Omega);
+		0, cosd(Omega), -sind(Omega),
+		0, sind(Omega), cosd(Omega);
 
-	Mf0 << cosd(Phi), 0, -sind(Phi),
+	Mf0 << cosd(Phi), 0, sind(Phi),
 		0, 1, 0,
-		sind(Phi), 0, cosd(Phi);
+		-sind(Phi), 0, cosd(Phi);
 
-	Mk0 << cosd(Kappa), sind(Kappa), 0,
-		-sind(Kappa), cosd(Kappa), 0,
+	Mk0 << cosd(Kappa), -sind(Kappa), 0,
+		sind(Kappa), cosd(Kappa), 0,
 		0, 0, 1;
 
 	Rot_g2i = Mk0 * Mf0*Mw0;
@@ -59,22 +59,23 @@ void BoresightLS::computeA()
 
 void BoresightLS::computefx(){
 	// pass
-	VectorXd eop_i = VectorXd::Zero(3);
+	VectorXd eop_i = VectorXd::Zero(6);
 	MatrixXd R_eop_i = MatrixXd::Zero(3,3);
 	VectorXd r_b = VectorXd::Zero(3);
 	MatrixXd R_b = MatrixXd::Zero(3,3);
 	VectorXd n_i = VectorXd::Zero(3);
 	VectorXd p_i = VectorXd::Zero(3);
-	int unique_pane, scene;
+	VectorXd p_g = VectorXd::Zero(3);
+	int unique_pane, scene, plane_x0_index;
 	double d_i;
 	// Initial size of Fx
 	fx = VectorXd::Zero(numLidPts);
 
-	// Set the vector, matrix for Boresight (same every iteration)
+	// Set the vector, matrix for Boresight (same every point)
 	r_b(0) = x0(0); //X
 	r_b(1) = x0(1); //Y
 	r_b(2) = x0(2); //Z
-	Rotation_g2i(x0(3),x0(4),x0(5),R_b);
+	RotationMatrix(x0(3),x0(4),x0(5),R_b); // Boresight rotation
 
 	for(int i=0;i<numLidPts;i++){
 		unique_pane = point_details(i,3);
@@ -84,22 +85,29 @@ void BoresightLS::computefx(){
 		eop_i(0) = scene_details(scene,0); //X
 		eop_i(1) = scene_details(scene,1); //Y
 		eop_i(2) = scene_details(scene,2); //Z
-		Rotation_g2i(scene_details(scene,3),scene_details(scene,4),scene_details(scene,5),R_eop_i);
+		eop_i(3) = scene_details(scene,3); //Z
+		eop_i(4) = scene_details(scene,4); //Z
+		eop_i(5) = scene_details(scene,5); //Z
+
+//		RotationMatrix(scene_details(scene,3),scene_details(scene,4),scene_details(scene,5),R_eop_i);
 
 		// Set the vector for plane details
-		n_i(0) = plane_details(unique_pane,0); //n1
-		n_i(1) = plane_details(unique_pane,1); //n2
-		n_i(2) = plane_details(unique_pane,2); //n3
-		d_i = plane_details(unique_pane,3); //d
+		plane_x0_index = 4*unique_pane + 6;
+		n_i(0) = x0(plane_x0_index); //n1
+		n_i(1) = x0(plane_x0_index+1); //n2
+		n_i(2) = x0(plane_x0_index+2); //n3
+		d_i = x0(plane_x0_index+3); //d
 
 		// Set the point vector for iteration
 		p_i(0) = point_details(i,0); //x
 		p_i(1) = point_details(i,1); //y
 		p_i(2) = point_details(i,2); //z
 
+		p_g = bring_to_ground(eop_i, x0, p_i);
+
 		// do matrix math
 
-		fx(i) = (eop_i + R_eop_i*r_b + R_eop_i*R_b*p_i).transpose()*n_i + d_i;
+		fx(i) = p_g.transpose()*n_i + d_i;
 
 	}
 
@@ -123,7 +131,6 @@ void BoresightLS::computeAandw()
 	//The same actual point can be observed in diff scenes and have diff x,y,z values.
 	//x_sj y_sj z_sj
 	//x y z
-
 
 	MatrixXd A1(0, 0);
 	MatrixXd A2(0, 0);
@@ -325,6 +332,8 @@ void BoresightLS::setAdjustmentDetails(MatrixXd point_details_in, MatrixXd plane
 	u = 6 + 4*numPlanes;
 }
 
+
+
 //Function to compute derivatives of rotation matrix elements wrt rotation angles
 MatrixXd BoresightLS::RotWrtAngles(double w, double phi, double K)
 {
@@ -410,9 +419,9 @@ MatrixXd BoresightLS::computeAPt(int pt_index)
 
 	// Plane parameters (note, we don't need d here as the derivative is 1)
 	int planeNum = point_details(pt_index,3);
-	double n_xpg = plane_details(planeNum,0); // n1
-	double n_ypg = plane_details(planeNum,1); // n2
-	double n_zpg = plane_details(planeNum,2); // n3
+	double n_xpg = x0(6+planeNum); // n1
+	double n_ypg = x0(6+planeNum+1); // n2
+	double n_zpg = x0(6+planeNum+2); // n3
 
 
 	// Unknows = [6 boresight, 4*number of planes]
@@ -422,7 +431,6 @@ MatrixXd BoresightLS::computeAPt(int pt_index)
 	//6 Boresight parameters
 	A_point(0, 0) = (n_ypg*(sind(K_bjg)*cosd(w_bjg) + cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + n_zpg*(sind(K_bjg)*sind(w_bjg)
 		- cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + n_xpg*cosd(K_bjg)*cosd(phi_bjg));
-
 
 	A_point(0, 1) = (n_ypg*(cosd(K_bjg)*cosd(w_bjg) - sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + n_zpg*(cosd(K_bjg)*sind(w_bjg)
 		+ sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) - n_xpg*sind(K_bjg)*cosd(phi_bjg));
@@ -512,6 +520,63 @@ MatrixXd BoresightLS::computewPt(double x_Sjb, double y_Sjb, double z_Sjb,
 	return w3;
 }
 
+
+VectorXd bring_plane_to_ground(VectorXd eop, VectorXd x0, VectorXd n){
+		VectorXd t_eop = VectorXd::Zero(3);
+		VectorXd t_b = VectorXd::Zero(3);
+		VectorXd n_g = VectorXd::Zero(3);
+		MatrixXd R_eop = MatrixXd::Zero(3,3);
+		MatrixXd R_b = MatrixXd::Zero(3,3);
+		MatrixXd R_total = MatrixXd::Zero(3,3);
+
+		t_eop << eop(0), eop(1), eop(2);
+		t_b << x0(0), x0(1), x0(2);
+		RotationMatrix(eop(3), eop(4), eop(5), R_eop);
+		RotationMatrix(x0(3), x0(4), x0(5), R_b);
+//		cout << "\nEOP:\n"<< eop <<endl;
+//		cout << "\nB:\n"<< x0[3]<< endl << x0[4] << endl << x0[5] <<endl;
+//		cout << "\n\nR_eop:\n" << R_eop << endl;
+//		cout << "\n\R_b:\n" << R_b << endl;
+
+	//	R_eop.transposeInPlace();
+	//	R_b.transposeInPlace();
+		R_total = (R_eop*R_b).inverse().transpose();
+		n_g = (R_total*n);
+
+
+		return n_g;
+
+}
+
+
+VectorXd bring_to_ground(VectorXd eop, VectorXd x0, VectorXd n){
+	VectorXd t_eop = VectorXd::Zero(3);
+	VectorXd t_b = VectorXd::Zero(3);
+	VectorXd n_g = VectorXd::Zero(3);
+	MatrixXd R_eop = MatrixXd::Zero(3,3);
+	MatrixXd R_b = MatrixXd::Zero(3,3);
+
+	t_eop << eop(0), eop(1), eop(2);
+	t_b << x0(0), x0(1), x0(2);
+	RotationMatrix(eop(3), eop(4), eop(5), R_eop);
+	RotationMatrix(x0(3), x0(4), x0(5), R_b);
+
+//	cout << "\n\nt_eop:\n" << t_eop << endl;
+//	cout << "\n\nt_b:\n" << t_b << endl;
+//	cout << "\n\nR_eop:\n" << R_eop << endl;
+//	cout << "\n\nR_b:\n" << R_b << endl;
+//	cout << "\n\nR_eop*t_b:\n" << R_eop*t_b << endl;
+//	cout << "\n\nR_eop*R_b*n:\n" << R_eop*R_b*n << endl;
+//	cout << "\n\nn:\n" << n << endl;
+
+//	R_eop.transposeInPlace();
+//	R_b.transposeInPlace();
+
+	n_g = (t_eop + R_eop*t_b + R_eop*R_b*n);
+
+
+	return n_g;
+}
 
 
 

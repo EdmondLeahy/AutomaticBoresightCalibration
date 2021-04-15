@@ -88,7 +88,7 @@ void Write_Mat(char *FileName, MatrixXd &m, int decimal_precision) {
 
 //Receives three rotation angles (Omega,Phi,Kappa) and returns the rotation matrix from the object to the image space (Rot_g2i)
 //Note that the rotation from image to object space is the transpose of "Rot_g2i"
-void Rotation_g2i(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i) {
+void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i) {
 	Matrix3b3 Mw0;
 	Matrix3b3 Mf0;
 	Matrix3b3 Mk0;
@@ -96,15 +96,15 @@ void Rotation_g2i(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i) {
 	// compute R_g_to_i and return it to the Rot_g2i
 
 	Mw0 << 1, 0, 0,
-		0, cosd(Omega), sind(Omega),
-		0, -sind(Omega), cosd(Omega);
+		0, cosd(Omega), -sind(Omega),
+		0, sind(Omega), cosd(Omega);
 
-	Mf0 << cosd(Phi), 0, -sind(Phi),
+	Mf0 << cosd(Phi), 0, sind(Phi),
 		0, 1, 0,
-		sind(Phi), 0, cosd(Phi);
+		-sind(Phi), 0, cosd(Phi);
 
-	Mk0 << cosd(Kappa), sind(Kappa), 0,
-		-sind(Kappa), cosd(Kappa), 0,
+	Mk0 << cosd(Kappa), -sind(Kappa), 0,
+		sind(Kappa), cosd(Kappa), 0,
 		0, 0, 1;
 
 	Rot_g2i = Mk0 * Mf0*Mw0;
@@ -528,7 +528,7 @@ MatrixXd georeference_lidar_point(MatrixXd data, MatrixXd boresight_LA, MatrixXd
 			data(i, 6),
 			data(i, 7);
 
-		Rotation_g2i(data(i, 8), data(i, 9), data(i, 10), R_b_geo); // Inputs: roll, pitch, azimuth, output matrix
+		RotationMatrix(data(i, 8), data(i, 9), data(i, 10), R_b_geo); // Inputs: roll, pitch, azimuth, output matrix
 
 		r_lidar_b << boresight_LA(0, 0),
 			boresight_LA(0, 1),
@@ -536,9 +536,9 @@ MatrixXd georeference_lidar_point(MatrixXd data, MatrixXd boresight_LA, MatrixXd
 
 		//R_lidar_b << boresight_angles(0, 0),
 		//	boresight_angles(0, 1),
-		//	boresight_angles(0, 2); // Assumes boresight_angles is a 1x3 matrix -> read these into Rotation_g2i matrix
+		//	boresight_angles(0, 2); // Assumes boresight_angles is a 1x3 matrix -> read these into RotationMatrix matrix
 
-		Rotation_g2i(boresight_angles(0, 0), boresight_angles(0, 1), boresight_angles(0, 2), R_lidar_b); // Assumes boresight_angles is a 1x3 matrix
+		RotationMatrix(boresight_angles(0, 0), boresight_angles(0, 1), boresight_angles(0, 2), R_lidar_b); // Assumes boresight_angles is a 1x3 matrix
 			
 		vert_angle = data(i, 2);
 		horiz_angle = data(i, 3);
@@ -622,7 +622,7 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 		// TODO: use the initial boresight estimate for this! What if the sensor is on it's side?
 		az_diff = base_scene.scene_orientation.kappa - scenes[i].scene_orientation.kappa;
 		// create the rotation matrix
-		Rotation_g2i(0,0,-az_diff, temp_rot);
+		RotationMatrix(0,0,az_diff, temp_rot);
 		scene_az_adjustment << temp_rot(0,0), temp_rot(0,1), temp_rot(0,2), 0,
 								 temp_rot(1,0), temp_rot(1,1), temp_rot(1,2), 0,
 								 temp_rot(2,0), temp_rot(2,1), temp_rot(2,2), 0,
@@ -764,7 +764,17 @@ void print_vector(vector<int> print_vector)
 	}
 
 }
+void print_vector(vector<double> print_vector)
+{
+	for (int i = 0; i < print_vector.size(); i++)
+	{
+		cout << std::fixed;
+		cout << std::setprecision(7);
+		cout << "\t" << print_vector[i] << endl;
 
+	}
+
+}
 
 double check_plane_dists(Orientation orient_base, Orientation orient_target, Plane p_base, Plane p_target)
 {
@@ -1081,7 +1091,7 @@ void plane_to_global(Plane &p1, Orientation O1)
 
 	target_plane_vec << p1.a1, p1.a2, p1.a3;
 
-	Rotation_g2i(-1*O1.omega, -1*O1.phi, -1*O1.kappa, R_del);
+	RotationMatrix(-1*O1.omega, -1*O1.phi, -1*O1.kappa, R_del);
 	
 	global_translation << O1.X, O1.Y, O1.Z;
 
@@ -1150,7 +1160,7 @@ MatrixXd merge_data(MatrixXd IE_data, MatrixXd lidar_data, double time)
 	return output;
 
 }
-void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details)
+void create_bundle_observations(VectorXd &x0, vector<Scene> scenes, UniquePlanes unique, MatrixXd &point_details, MatrixXd &scene_details, MatrixXd &plane_details)
 {
 	//This function makes the three Bundle Adjustment observation vectors
 
@@ -1186,14 +1196,84 @@ void create_bundle_observations(vector<Scene> scenes, UniquePlanes unique, Matri
 
 	//Plane Details
 	plane_details = MatrixXd::Zero(unique.unique_planes.size(),4);
+	MatrixXd plane_details_ground = MatrixXd::Zero(unique.unique_planes.size(),4);
+	VectorXd plane_params = VectorXd::Zero(3);
+	VectorXd eop = VectorXd::Zero(6);
+//	PointCloudXYZ rot_plane_cloud(new PointCloudXYZ);
+	pcl::PointCloud<pcl::PointXYZ> pt_cloud_g;
+	VectorXd pnt_on_plane = VectorXd::Zero(3);
+	VectorXd pnt_on_plane_g = VectorXd::Zero(3);
+//	Matrix4d scene_az_adjustment;
+//	MatrixXd temp_rot_eop = MatrixXd::Zero(3,3);
+//	MatrixXd temp_rot_b = MatrixXd::Zero(3,3);
+//	MatrixXd temp_rot = MatrixXd::Zero(3,3);
+	double d = 0;
 	//	This vector contains the details of each unique plane in the scenes.
-	//	| A1 | A2 | A3 | B | 
+	//	| A1 | A2 | A3 | D |
 	for (int i = 0; i < unique.unique_planes.size(); i++)
 	{
-		plane_details(i,0) = unique.unique_planes[i].a1;
-		plane_details(i,1) = unique.unique_planes[i].a2,
-		plane_details(i,2) = unique.unique_planes[i].a3;
-		plane_details(i,3) = unique.unique_planes[i].b;
+		// Get the plane parameters, in the sensor frame
+		plane_params(0) = unique.unique_planes[i].a1;
+		plane_params(1) = unique.unique_planes[i].a2;
+		plane_params(2) = unique.unique_planes[i].a3;
+		eop(0) = unique.reference_orientations[i].X;
+		eop(1) = unique.reference_orientations[i].Y;
+		eop(2) = unique.reference_orientations[i].Z;
+		eop(3) = unique.reference_orientations[i].omega;
+		eop(4) = unique.reference_orientations[i].phi;
+		eop(5) = unique.reference_orientations[i].kappa;
+//		plane_details(i,3) = unique.unique_planes[i].b;
+
+		// bring sensor frame plane to ground, using estimated x0
+		plane_params = bring_plane_to_ground(eop, x0, plane_params);
+		plane_params.normalize();
+
+//		RotationMatrix(unique.reference_orientations[i].omega,unique.reference_orientations[i].phi,unique.reference_orientations[i].kappa, temp_rot_eop);
+//		RotationMatrix(x0[3],x0[4],x0[5], temp_rot_b);
+//
+//		temp_rot = temp_rot_eop*temp_rot_b;
+//
+//		scene_az_adjustment << temp_rot(0,0), temp_rot(0,1), temp_rot(0,2), unique.reference_orientations[i].X,
+//										 temp_rot(1,0), temp_rot(1,1), temp_rot(1,2), unique.reference_orientations[i].Y,
+//										 temp_rot(2,0), temp_rot(2,1), temp_rot(2,2), unique.reference_orientations[i].Z,
+//										 0, 0, 0, 1;
+//		// rotate the points on the plane, to ground
+//		transformPointCloud (*unique.unique_planes[i].points_on_plane, *rot_plane_cloud, scene_az_adjustment);
+//		rot_plane_cloud.width = unique.unique_planes[i].points_on_plane->points.size();
+//		rot_plane_cloud.points.resize (rot_plane_cloud.width);
+
+		  // Fill in the cloud data
+
+		pt_cloud_g.points.resize (unique.unique_planes[i].points_on_plane->points.size());
+
+		  for (int j=0;j<unique.unique_planes[i].points_on_plane->points.size();j++){
+
+			  pnt_on_plane << unique.unique_planes[i].points_on_plane->points[j].x, unique.unique_planes[i].points_on_plane->points[j].y, unique.unique_planes[i].points_on_plane->points[j].z;
+			  pnt_on_plane_g = bring_to_ground(eop, x0, pnt_on_plane);
+			  pt_cloud_g.points[j].x = pnt_on_plane_g[0];
+			  pt_cloud_g.points[j].y = pnt_on_plane_g[1];
+			  pt_cloud_g.points[j].z = pnt_on_plane_g[2];
+		  }
+
+//		cout << "\n\nP1 before rotation:\n" << unique.unique_planes[i].points_on_plane->points[0] << endl;
+//		cout << "\n\nP1 after rotation:\n" << pt_cloud_g.points[0] << endl;
+
+		// Estimate (average) the d value
+		d = get_plane_d(pt_cloud_g, plane_params);
+
+		// set the plane vales.
+		x0(6+i*4) = plane_params(0);
+		x0(6+i*4+1) = plane_params(1);
+		x0(6+i*4+2) = plane_params(2);
+		x0(6+i*4+3) = d;
+
+//		cout << "\nPlaneParams:\n";
+//		print_matrix(plane_params);
+//		cout << "\n" << d << endl;
+
+
+
+
 	}
 
 	//Scene Details
@@ -1518,3 +1598,16 @@ void print_cloud(PointCloudXYZptr cloud) {
 double dist(double x, double y, double z) {
 	return sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2));
 }
+
+
+double get_plane_d(PointCloudXYZ pop, VectorXd plane_params ){
+	double d_sum =0;
+	double temp_d;
+	for(int i=0;i<pop.points.size();i++){
+		temp_d = plane_params(0)*pop.points[i].x  + plane_params(1)*pop.points[i].y  + plane_params(2)*pop.points[i].z ;
+		d_sum = d_sum + temp_d;
+	}
+
+	return -1 * d_sum/pop.points.size();
+}
+
