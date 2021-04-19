@@ -27,7 +27,6 @@
 using namespace std;
 using namespace Eigen;
 
-
 class BoresightLS : public LeastSquares
 {
 public:
@@ -51,7 +50,7 @@ private:
 	//Function to compute a row of A for a lidar point
 	MatrixXd computeAPt(int pt_index);
 	//Function to compute elements of a rotation matrix
-	MatrixXd RotMatElements(double w, double phi, double K);
+//	MatrixXd RotMatElements(double w, double phi, double K);
 	//Function to compute the derivatives of a point equation wrt rotation matrix elements for Rbjg
 	MatrixXd PtEqnWrtRotbjg(double x_Sjb, double y_Sjb, double z_Sjb, double w_Sb, double phi_Sb, double K_Sb, double x_sj, double y_sj, double z_sj, double n_xpg, double n_ypg, double n_zpg);
 	//Function to compute the derivatives of a point equation wrt rotation matrix elements for RSb
@@ -76,8 +75,6 @@ private:
 };
 
 
-void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
-
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols);
 
@@ -92,6 +89,8 @@ double get_plane_d(VectorXd n_plane);
 MatrixXd computeAScan(int u, int numPlanes, int scanNum);
 
 
+
+void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 
 //Function to compute 6 rows of w for a scan

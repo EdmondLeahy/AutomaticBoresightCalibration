@@ -88,27 +88,27 @@ void Write_Mat(char *FileName, MatrixXd &m, int decimal_precision) {
 
 //Receives three rotation angles (Omega,Phi,Kappa) and returns the rotation matrix from the object to the image space (Rot_g2i)
 //Note that the rotation from image to object space is the transpose of "Rot_g2i"
-void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i) {
-	Matrix3b3 Mw0;
-	Matrix3b3 Mf0;
-	Matrix3b3 Mk0;
-
-	// compute R_g_to_i and return it to the Rot_g2i
-
-	Mw0 << 1, 0, 0,
-		0, cosd(Omega), -sind(Omega),
-		0, sind(Omega), cosd(Omega);
-
-	Mf0 << cosd(Phi), 0, sind(Phi),
-		0, 1, 0,
-		-sind(Phi), 0, cosd(Phi);
-
-	Mk0 << cosd(Kappa), -sind(Kappa), 0,
-		sind(Kappa), cosd(Kappa), 0,
-		0, 0, 1;
-
-	Rot_g2i = Mk0 * Mf0*Mw0;
-};
+//void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i) {
+//	Matrix3b3 Mw0;
+//	Matrix3b3 Mf0;
+//	Matrix3b3 Mk0;
+//
+//	// compute R_g_to_i and return it to the Rot_g2i
+//
+//	Mw0 << 1, 0, 0,
+//		0, cosd(Omega), -sind(Omega),
+//		0, sind(Omega), cosd(Omega);
+//
+//	Mf0 << cosd(Phi), 0, sind(Phi),
+//		0, 1, 0,
+//		-sind(Phi), 0, cosd(Phi);
+//
+//	Mk0 << cosd(Kappa), -sind(Kappa), 0,
+//		sind(Kappa), cosd(Kappa), 0,
+//		0, 0, 1;
+//
+//	Rot_g2i = Mk0 * Mf0*Mw0;
+//};
 
 void Convert_R_to_Angles(Matrix3b3 R, double& Omega, double& Phi, double& Kappa) {
 
@@ -494,9 +494,9 @@ MatrixXd georeference_lidar_point(MatrixXd data, MatrixXd boresight_LA, MatrixXd
 	//2: subscript
 	//3: superscript
 	MatrixXd r_b_geo; //GNSS measurements -> geo coordinates of IMU center
-	Matrix3b3 R_b_geo; //IMU measurements -> rotation of IMU in geo frame
+	MatrixXd R_b_geo = MatrixXd::Zero(3,3); //IMU measurements -> rotation of IMU in geo frame
 	MatrixXd r_lidar_b; //Calibration lever arm
-	Matrix3b3 R_lidar_b; //Calibration angles
+	MatrixXd R_lidar_b = MatrixXd::Zero(3,3); //Calibration angles
 	MatrixXd r_p_lidar; //LiDAR measurements
 	MatrixXd r_p_geo; //ADDED TO OUTPUT -- Geo coords of the lidar point
 	MatrixXd output; //Output: [timestamp, X_lidar, Y_lidar, Z_lidar]
@@ -587,7 +587,7 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 	Matrix4d scene_az_adjustment;
 	PointCloudXYZ temp_registration_cloud;// ICP object for registering
 	RowVector3d mapping_temp;
-	Matrix3d temp_rot;
+	MatrixXd temp_rot = MatrixXd::Zero(3,3);
 	double plane_fit, best_fit, best_fit_plane, az_diff;
 	base_scene = scenes[0];
 
@@ -622,7 +622,7 @@ UniquePlanes match_scenes(vector<Scene> scenes)
 		// TODO: use the initial boresight estimate for this! What if the sensor is on it's side?
 		az_diff = base_scene.scene_orientation.kappa - scenes[i].scene_orientation.kappa;
 		// create the rotation matrix
-		RotationMatrix(0,0,az_diff, temp_rot);
+		RotationMatrix(0.0,0.0,az_diff, temp_rot);
 		scene_az_adjustment << temp_rot(0,0), temp_rot(0,1), temp_rot(0,2), 0,
 								 temp_rot(1,0), temp_rot(1,1), temp_rot(1,2), 0,
 								 temp_rot(2,0), temp_rot(2,1), temp_rot(2,2), 0,
@@ -805,32 +805,37 @@ double check_plane_dists(Orientation orient_base, Orientation orient_target, Pla
 
 void find_apply_shiftdown(vector<Scene> &scenes, vector<double> &shiftdown)
 {
-	double average_X = 0;
-	double average_Y = 0;
-	double average_Z = 0;
-	for (int i = 0; i < scenes.size(); i++)
-	{
-		average_X = average_X + scenes[i].scene_orientation.X;
-		average_Y = average_Y + scenes[i].scene_orientation.Y;
-		average_Z = average_Z + scenes[i].scene_orientation.Z;
-	}
-
-	average_X = (average_X) / scenes.size();
-	average_Y = (average_Y) / scenes.size();
-	average_Z = (average_Z) / scenes.size();
-
-	// Find shiftdown values
-	shiftdown.push_back(average_X);
-	shiftdown.push_back(average_Y);
-	shiftdown.push_back(average_Z);
+//	double average_X = 0;
+//	double average_Y = 0;
+//	double average_Z = 0;
+//	for (int i = 0; i < scenes.size(); i++)
+//	{
+//		average_X = average_X + scenes[i].scene_orientation.X;
+//		average_Y = average_Y + scenes[i].scene_orientation.Y;
+//		average_Z = average_Z + scenes[i].scene_orientation.Z;
+//	}
+//
+//	average_X = (average_X) / scenes.size();
+//	average_Y = (average_Y) / scenes.size();
+//	average_Z = (average_Z) / scenes.size();
+//
+//	// Find shiftdown values
+//	shiftdown.push_back(average_X);
+//	shiftdown.push_back(average_Y);
+//	shiftdown.push_back(average_Z);
 
 	// Apply shiftdown values
-	for (int j = 0; j < scenes.size(); j++)
+	for (int j = 1; j < scenes.size(); j++)
 	{
-		scenes[j].scene_orientation.X = scenes[j].scene_orientation.X - shiftdown[0];
-		scenes[j].scene_orientation.Y = scenes[j].scene_orientation.Y - shiftdown[1];
-		scenes[j].scene_orientation.Z = scenes[j].scene_orientation.Z - shiftdown[2];
+		scenes[j].scene_orientation.X = scenes[j].scene_orientation.X - scenes[0].scene_orientation.X;
+		scenes[j].scene_orientation.Y = scenes[j].scene_orientation.Y - scenes[0].scene_orientation.Y;
+		scenes[j].scene_orientation.Z = scenes[j].scene_orientation.Z - scenes[0].scene_orientation.Z;
+
 	}
+	// Zero the reference scene
+	scenes[0].scene_orientation.X = 0;
+	scenes[0].scene_orientation.Y = 0;
+	scenes[0].scene_orientation.Z = 0;
 
 	
 }
@@ -1085,7 +1090,7 @@ void plane_to_global(Plane &p1, Orientation O1)
 
 	*/
 	double del_omega, del_phi, del_kappa, plane_dist;
-	Matrix3b3 R_del;
+	MatrixXd R_del = MatrixXd::Zero(3,3);;
 	RowVector3d global_translation, target_rot_vec, target_plane_vec, shiftdown;
 	Vector4d full_transformed;
 
@@ -1390,7 +1395,6 @@ vector<Scene> LoadDebugData(string basedir)
 	temp_scene4.planes[1].points_on_plane = plane_cloud4_2;
 	temp_scene4.planes[2].points_on_plane = plane_cloud4_3;
 	scenes.push_back(temp_scene4);
-
 
 	cout << "returning from loading\n";
 

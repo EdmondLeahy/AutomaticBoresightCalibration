@@ -1,10 +1,6 @@
 #include "LS.h"
 
 
-BoresightLS::BoresightLS()
-{
-}
-
 
 void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) {
 	MatrixXd Mw0 = MatrixXd::Zero(3,3);
@@ -28,6 +24,7 @@ void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i) 
 	Rot_g2i = Mk0 * Mf0*Mw0;
 };
 
+
 //Function to fill a matrix with info from vector of vectors
 void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
 {
@@ -43,6 +40,21 @@ void vec2mat(vector<RowVectorXd>& vec, MatrixXd& mat, int cols)
 	return;
 }
 
+
+BoresightLS::BoresightLS()
+{
+	num_iter = 0;
+	n = 0;
+	u = 0;
+	clear();
+	isdebug = false;
+	isquiet = false;
+	snoop=false;
+	numScenes = 0;
+	numPlanes = 0;
+	numLidPts = 0;
+
+}
 
 void BoresightLS::computeA()
 {
@@ -77,6 +89,9 @@ void BoresightLS::computefx(){
 	r_b(2) = x0(2); //Z
 	RotationMatrix(x0(3),x0(4),x0(5),R_b); // Boresight rotation
 
+	// DEBUG
+	MatrixXd rot_points_final = MatrixXd::Zero(numLidPts,3);
+
 	for(int i=0;i<numLidPts;i++){
 		unique_pane = point_details(i,3);
 		scene = point_details(i,4);
@@ -103,13 +118,24 @@ void BoresightLS::computefx(){
 		p_i(1) = point_details(i,1); //y
 		p_i(2) = point_details(i,2); //z
 
+
 		p_g = bring_to_ground(eop_i, x0, p_i);
+
+
+		rot_points_final.row(i) = p_g;
 
 		// do matrix math
 
 		fx(i) = p_g.transpose()*n_i + d_i;
 
 	}
+
+	// DEBUG!
+	cout << "\n\tREMOVE ME!\n";
+	ofstream pnts_final_stream;
+	pnts_final_stream.open ("FinalPoints_All.txt");
+	pnts_final_stream << rot_points_final << endl;
+	pnts_final_stream.close();
 
 }
 
@@ -229,30 +255,30 @@ void BoresightLS::computeAandw()
 }
 
 
-//Function to compute elements of a rotation matrix, image to object rotation
-MatrixXd BoresightLS::RotMatElements(double w, double phi, double K)
-{
-	MatrixXd Rotw(3, 3);
-	MatrixXd Rotphi(3, 3);
-	MatrixXd RotK(3, 3);
-
-	Rotw << 1, 0, 0,
-		0, cosd(w), sind(w),
-		0, -sind(w), cosd(w);
-
-	Rotphi << cosd(phi), 0, -sind(phi),
-		0, 1, 0,
-		sind(phi), 0, cosd(phi);
-
-	RotK << cosd(K), sind(K), 0,
-		-sind(K), cosd(K), 0,
-		0, 0, 1;
-
-	MatrixXd RotMat = RotK*Rotphi*Rotw;
-	RotMat.transposeInPlace();
-
-	return RotMat;
-}
+////Function to compute elements of a rotation matrix, image to object rotation
+//MatrixXd BoresightLS::RotMatElements(double w, double phi, double K)
+//{
+//	MatrixXd Rotw(3, 3);
+//	MatrixXd Rotphi(3, 3);
+//	MatrixXd RotK(3, 3);
+//
+//	Rotw << 1, 0, 0,
+//		0, cosd(w), sind(w),
+//		0, -sind(w), cosd(w);
+//
+//	Rotphi << cosd(phi), 0, -sind(phi),
+//		0, 1, 0,
+//		sind(phi), 0, cosd(phi);
+//
+//	RotK << cosd(K), sind(K), 0,
+//		-sind(K), cosd(K), 0,
+//		0, 0, 1;
+//
+//	MatrixXd RotMat = RotK*Rotphi*Rotw;
+//	RotMat.transposeInPlace();
+//
+//	return RotMat;
+//}
 
 
 
@@ -261,7 +287,8 @@ MatrixXd BoresightLS::PtEqnWrtRotbjg(double x_Sjb, double y_Sjb, double z_Sjb, d
 {
 	MatrixXd Dbjg1(9, 1);
 
-	MatrixXd RotMat = RotMatElements(w_Sb, phi_Sb, K_Sb);
+	MatrixXd RotMat = MatrixXd::Zero(3,3);
+	RotationMatrix(w_Sb, phi_Sb, K_Sb, RotMat);
 
 	double RSb_11 = RotMat(0, 0);
 	double RSb_12 = RotMat(0, 1);
@@ -293,7 +320,8 @@ MatrixXd BoresightLS::PtEqnWrtRotSb(double w_bjg, double phi_bjg, double K_bjg, 
 {
 	MatrixXd DSb1(9, 1);
 
-	MatrixXd RotMat = RotMatElements(w_bjg, phi_bjg, K_bjg);
+	MatrixXd RotMat = MatrixXd::Zero(3,3);
+	RotationMatrix(w_bjg, w_bjg, K_bjg, RotMat);
 
 	double Rbjg_11 = RotMat(0, 0);
 	double Rbjg_12 = RotMat(0, 1);
@@ -577,7 +605,6 @@ VectorXd bring_to_ground(VectorXd eop, VectorXd x0, VectorXd n){
 
 	return n_g;
 }
-
 
 
 

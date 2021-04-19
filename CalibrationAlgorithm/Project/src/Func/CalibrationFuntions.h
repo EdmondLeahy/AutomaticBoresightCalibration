@@ -1,6 +1,8 @@
 #ifndef BORESIGHT_ITMF
 #define BORESIGHT_ITMF
 
+#include "LS.h"
+
 #include <iostream>
 #include <Eigen/Dense> //for Eigen library
 #include <Eigen/Core>
@@ -11,7 +13,6 @@
 #include <iomanip> 
 #include <string>
 #include <cmath>  
-#include "LS.h"
 
 //#include <filesystem>
 //namespace fs = std::filesystem;
@@ -116,7 +117,7 @@ void Read_Mat(char *FileName, MatrixXd& m);//reads a formatted file to a matrix
 
 void Write_Mat(char *FileName, MatrixXd & m, int decimal_precision); //writes a matrix to a formatted file
 
-void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
+//void RotationMatrix(double Omega, double Phi, double Kappa, Matrix3b3 & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 void Convert_R_to_Angles(Matrix3b3 R, double& Omega, double& Phi, double& Kappa); //Takes 3x3 matrix, makes 3 Anges
 
@@ -203,5 +204,7 @@ void get_hour_day(double GPS_time, double *hour, int *day);
 double round_time(double time);
 
 double get_plane_d(PointCloudXYZ pop, VectorXd plane_params);
+
+void RotationMatrix(double Omega, double Phi, double Kappa, MatrixXd & Rot_g2i); //Takes 3 Anges, makes 3x3 matrix
 
 #endif

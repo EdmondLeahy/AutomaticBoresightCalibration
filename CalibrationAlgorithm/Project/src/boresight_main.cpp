@@ -34,15 +34,18 @@ int main() {
 
 
 	//DEBUG INPUT
-	string base = "/mnt/BigSlowBoi/DOCUMENTS/University/UniversityCourses/5thyear/ENGO500/Data/Data/Debug_INPUT/";
+	string base = "/mnt/BigSlowBoi/DOCUMENTS/Projects/AutomaticBoresightCalibration/Debug_INPUT/";
 
 	vector<Scene> scenes = LoadDebugData(base);
 
 	cout << "Finished loading debug scenes\n";
 
 	//Get the Shiftdown for distance measurement simplification (If doing geolation later, must revert this!)
+	// This makes it relative to the first Orientation
 	vector<double> shiftdown;
 	find_apply_shiftdown(scenes, shiftdown);
+
+
 
 	cout << "\n-------------------------Finished finding planes -------------------------------------------------------\n";
 	cout << "Matching planes....\n";
@@ -63,7 +66,7 @@ int main() {
 	x0(1) = -1.272; // y
 	x0(2) = -2.4158; // z
 	x0(3) = 180; // omega
-	x0(4) = -0; // phi
+	x0(4) = 0; // phi
 	x0(5) = 90; // kappa
 //	x0(3) = 0; // omega
 //	x0(4) = 0; // phi
@@ -85,15 +88,15 @@ int main() {
 	MatrixXd temp_cl = MatrixXd::Ones(point_details.rows(),1);
 
 	//input the observations
-	boresight_adjustment.setIter(2);
+	boresight_adjustment.setIter(4);
 	boresight_adjustment.setTol(1.0e-5);
 	boresight_adjustment.setAdjustmentDetails(point_details, plane_details, scene_details, x0);
 	boresight_adjustment.setP(temp_cl);
 //	boresight_adjustment.computeA();
 //	cout << boresight_adjustment.A << endl;
-//	boresight_adjustment.iterate();
+	boresight_adjustment.iterate();
 //	boresight_adjustment.computeLS();
-	boresight_adjustment.computeMisclosure();
+//	boresight_adjustment.computeMisclosure();
 
 //	cout << "\n\nThe W is: \n" << boresight_adjustment.getw() << endl;
 
@@ -107,10 +110,12 @@ int main() {
 
 	clog << "\n\n FINISHED CALIBRATION\n\n";
 
+
 	ofstream myfile;
 	myfile.open ("A_Full.txt");
 	myfile << boresight_adjustment.A << endl;
 	myfile.close();
+
 
 	cin.get();
 	return(0);
