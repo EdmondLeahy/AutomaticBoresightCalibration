@@ -49,6 +49,8 @@ private:
 	MatrixXd computeAPlane(int u, int planeNum, double n_xpg, double n_ypg, double n_zpg);
 	//Function to compute a row of A for a lidar point
 	MatrixXd computeAPt(int pt_index);
+	// Function to compute a row of A for a plane constraint
+	MatrixXd computeAPlane(int plane_index);
 	//Function to compute elements of a rotation matrix
 //	MatrixXd RotMatElements(double w, double phi, double K);
 	//Function to compute the derivatives of a point equation wrt rotation matrix elements for Rbjg

@@ -1,0 +1,1 @@
+n_xpg*cosd(K_Sb)*cosd(phi_Sb)+n_ypg*sind(K_Sb)*cosd(phi_Sb) − n_zpg*sind(phi_Sb)

@@ -62,15 +62,20 @@ int main() {
 	VectorXd x0 = VectorXd::Zero(6+unique_planes.unique_planes.size()*4);
 
 	// Set the approximate values for the boresight parameters (given by NovAtel):
-	x0(0) = -1.661; // x
-	x0(1) = -1.272; // y
-	x0(2) = -2.4158; // z
+//	x0(0) = -1.661; // x
+//	x0(1) = -1.272; // y
+//	x0(2) = -2.4158; // z
+//	x0(3) = 180; // omega
+//	x0(4) = 0; // phi
+//	x0(5) = 90; // kappa
+
+
+	x0(0) = -0; // x
+	x0(1) = -0; // y
+	x0(2) = 0; // z
 	x0(3) = 180; // omega
 	x0(4) = 0; // phi
 	x0(5) = 90; // kappa
-//	x0(3) = 0; // omega
-//	x0(4) = 0; // phi
-//	x0(5) = 0; // kappa
 
 
 	MatrixXd point_details = MatrixXd::Zero(1,1);
@@ -85,25 +90,27 @@ int main() {
 
 	BoresightLS boresight_adjustment;
 
-	MatrixXd temp_cl = MatrixXd::Ones(point_details.rows(),1);
+	MatrixXd temp_cl = MatrixXd::Ones(point_details.rows()+plane_details.rows(),1);
+
 
 	//input the observations
-	boresight_adjustment.setIter(4);
+	boresight_adjustment.setIter(40);
 	boresight_adjustment.setTol(1.0e-5);
 	boresight_adjustment.setAdjustmentDetails(point_details, plane_details, scene_details, x0);
+
+	cout << "\n\nThe x0 is: " << boresight_adjustment.getx0() << endl;
 	boresight_adjustment.setP(temp_cl);
 //	boresight_adjustment.computeA();
 //	cout << boresight_adjustment.A << endl;
 	boresight_adjustment.iterate();
 //	boresight_adjustment.computeLS();
 //	boresight_adjustment.computeMisclosure();
-
+//
 //	cout << "\n\nThe W is: \n" << boresight_adjustment.getw() << endl;
 
-	cout << "\n\nThe x0 is: " << boresight_adjustment.getx0() << endl;
 //
 //	cout << "\n\nThe d is: " << boresight_adjustment.getd() << endl;
-	cout << "\n\nThe xh is: " << boresight_adjustment.getxh() << endl;
+	cout << "\n\nThe xh is:\n " << boresight_adjustment.getxh() << endl;
 	cout << "\n\nThe mean w is: " << boresight_adjustment.getw().mean() << endl;
 //	cout << "\n\nThe shiftdown is: \n";
 //	print_vector(shiftdown);
@@ -115,6 +122,11 @@ int main() {
 	myfile.open ("A_Full.txt");
 	myfile << boresight_adjustment.A << endl;
 	myfile.close();
+
+	ofstream wfile;
+	wfile.open ("w_Final.txt");
+	wfile << boresight_adjustment.getw ()<< endl;
+	wfile.close();
 
 
 	cin.get();

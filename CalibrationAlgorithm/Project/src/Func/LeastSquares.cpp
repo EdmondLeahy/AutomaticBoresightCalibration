@@ -352,6 +352,7 @@ double LeastSquares::getMaxDelta()
 
 	}
 	if (isquiet != true) { cout << "Max Delta for it: " << max << endl; }
+	cout << '\n' << d << endl;
 	return max;
 }
 

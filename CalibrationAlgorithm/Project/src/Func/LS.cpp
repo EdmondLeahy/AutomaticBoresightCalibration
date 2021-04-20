@@ -58,13 +58,19 @@ BoresightLS::BoresightLS()
 
 void BoresightLS::computeA()
 {
-	A = MatrixXd::Zero(numLidPts, u);
+	A = MatrixXd::Zero(numLidPts+numPlanes, u);
 	MatrixXd row = MatrixXd::Zero(1,u);
 //	MatrixXd row = MatrixXd::Zero(1,u);
 	//Loop for every lidar point observation
 	for (int i = 0; i<numLidPts; i++) {
 		row = computeAPt(i);
 		A.block(i, 0, 1, u) = row;
+	}
+
+	//Loop for every plane equation constraint
+	for (int i = 0; i<numPlanes; i++) {
+		row = computeAPlane(i);
+		A.block(numLidPts+i, 0, 1, u) = row;
 	}
 
 }
@@ -81,7 +87,7 @@ void BoresightLS::computefx(){
 	int unique_pane, scene, plane_x0_index;
 	double d_i;
 	// Initial size of Fx
-	fx = VectorXd::Zero(numLidPts);
+	fx = VectorXd::Zero(numLidPts+numPlanes);
 
 	// Set the vector, matrix for Boresight (same every point)
 	r_b(0) = x0(0); //X
@@ -90,7 +96,7 @@ void BoresightLS::computefx(){
 	RotationMatrix(x0(3),x0(4),x0(5),R_b); // Boresight rotation
 
 	// DEBUG
-	MatrixXd rot_points_final = MatrixXd::Zero(numLidPts,3);
+	MatrixXd rot_points_final = MatrixXd::Zero(numLidPts+numPlanes,3);
 
 	for(int i=0;i<numLidPts;i++){
 		unique_pane = point_details(i,3);
@@ -128,6 +134,15 @@ void BoresightLS::computefx(){
 
 		fx(i) = p_g.transpose()*n_i + d_i;
 
+	}
+
+	for(int i=0;i<numPlanes;i++){
+
+		plane_x0_index = 4*i + 6;
+		n_i(0) = x0(plane_x0_index); //n1
+		n_i(1) = x0(plane_x0_index+1); //n2
+		n_i(2) = x0(plane_x0_index+2); //n3
+		fx(numLidPts + i) = pow(n_i(0),2) + pow(n_i(1),2) + pow(n_i(2),2) - 1.0;
 	}
 
 	// DEBUG!
@@ -415,13 +430,6 @@ MatrixXd BoresightLS::RotWrtAngles(double w, double phi, double K)
 //pointNum is the number of a point that matches the point equation
 MatrixXd BoresightLS::computeAPt(int pt_index)
 
-//int u, int numPlanes, int planeNum, int scanNum,
-//	double x_Sjb, double y_Sjb, double z_Sjb,
-//	double w_Sb, double phi_Sb, double K_Sb,
-//	double n_xpg, double n_ypg, double n_zpg,
-//	double x_bjg, double y_bjg, double z_bjg,
-//	double w_bjg, double phi_bjg, double K_bjg,
-//	double x_sj, double y_sj, double z_sj)
 {
 	// EOP of scene:
 	int sceneNum = point_details(pt_index,4);
@@ -450,6 +458,7 @@ MatrixXd BoresightLS::computeAPt(int pt_index)
 	double n_xpg = x0(6+planeNum); // n1
 	double n_ypg = x0(6+planeNum+1); // n2
 	double n_zpg = x0(6+planeNum+2); // n3
+	double n_dpg = x0(6+planeNum+3); // n3
 
 
 	// Unknows = [6 boresight, 4*number of planes]
@@ -457,57 +466,54 @@ MatrixXd BoresightLS::computeAPt(int pt_index)
 
 
 	//6 Boresight parameters
-	A_point(0, 0) = (n_ypg*(sind(K_bjg)*cosd(w_bjg) + cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + n_zpg*(sind(K_bjg)*sind(w_bjg)
-		- cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + n_xpg*cosd(K_bjg)*cosd(phi_bjg));
+	// x
+	A_point(0, 0) = n_xpg*cosd(K_Sb)*cosd(phi_Sb) + n_ypg*sind(K_Sb)*cosd(phi_Sb) - n_zpg*sind(phi_Sb);
+	// y
+	A_point(0, 1) = n_xpg*(-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb)) + n_ypg*(sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb)) + n_zpg*sind(w_Sb)*cosd(phi_Sb);
+	// z
+	A_point(0, 2) = n_xpg*(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb)) + n_ypg*(sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb)) + n_zpg*cosd(phi_Sb)*cosd(w_Sb);
+	// Omega
+	A_point(0, 3)= n_xpg*(y_sj*((sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*cosd(phi_bjg)*cosd(w_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg)) + (sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*cosd(K_Sb)*cosd(phi_Sb)) + z_sj*(-(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*sind(w_bjg)*cosd(phi_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(-sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)) + (sind(K_bjg)*cosd(w_bjg) - sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*cosd(K_Sb)*cosd(phi_Sb))) + n_ypg*(y_sj*((sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*sind(K_Sb)*cosd(phi_Sb) + (sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*(sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg)) + (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*cosd(phi_bjg)*cosd(w_bjg)) + z_sj*((sind(K_bjg)*cosd(w_bjg) - sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*sind(K_Sb)*cosd(phi_Sb) + (sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*(-sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)) - (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*sind(w_bjg)*cosd(phi_bjg))) + n_zpg*(y_sj*((-sind(K_bjg)*sind(w_bjg) - sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*sind(phi_Sb) + (sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg))*sind(w_Sb)*cosd(phi_Sb) + cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)*cosd(w_bjg)) + z_sj*((-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*sind(phi_Sb) + (-sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg))*sind(w_Sb)*cosd(phi_Sb) - sind(w_bjg)*cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)));
+	//Phi
+	A_point(0, 4)= n_xpg*(x_sj*((-sind(K_Sb)*sind(w_Sb) - sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*cosd(phi_bjg) - (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*sind(K_bjg)*sind(phi_bjg) - sind(phi_bjg)*cosd(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)) + y_sj*(-(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*sind(phi_bjg)*sind(w_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*sind(K_bjg)*sind(w_bjg)*cosd(phi_bjg) + sind(w_bjg)*cosd(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + z_sj*(-(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*sind(phi_bjg)*cosd(w_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*sind(K_bjg)*cosd(phi_bjg)*cosd(w_bjg) + cosd(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_bjg))) + n_ypg*(x_sj*(-(sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*sind(K_bjg)*sind(phi_bjg) + (-sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) + sind(w_Sb)*cosd(K_Sb))*cosd(phi_bjg) - sind(K_Sb)*sind(phi_bjg)*cosd(K_bjg)*cosd(phi_Sb)) + y_sj*((sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*sind(K_bjg)*sind(w_bjg)*cosd(phi_bjg) - (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*sind(phi_bjg)*sind(w_bjg) + sind(K_Sb)*sind(w_bjg)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + z_sj*((sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*sind(K_bjg)*cosd(phi_bjg)*cosd(w_bjg) - (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*sind(phi_bjg)*cosd(w_bjg) + sind(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_bjg))) + n_zpg*(x_sj*(-sind(K_bjg)*sind(phi_bjg)*sind(w_Sb)*cosd(phi_Sb) + sind(phi_Sb)*sind(phi_bjg)*cosd(K_bjg) - cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)) + y_sj*(sind(K_bjg)*sind(w_Sb)*sind(w_bjg)*cosd(phi_Sb)*cosd(phi_bjg) - sind(phi_Sb)*sind(w_bjg)*cosd(K_bjg)*cosd(phi_bjg) - sind(phi_bjg)*sind(w_bjg)*cosd(phi_Sb)*cosd(w_Sb)) + z_sj*(sind(K_bjg)*sind(w_Sb)*cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_bjg) - sind(phi_Sb)*cosd(K_bjg)*cosd(phi_bjg)*cosd(w_bjg) - sind(phi_bjg)*cosd(phi_Sb)*cosd(w_Sb)*cosd(w_bjg)));
+	// Kappa
+	A_point(0, 5)= n_xpg*(x_sj*((-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*cosd(K_bjg)*cosd(phi_bjg) - sind(K_bjg)*cosd(K_Sb)*cosd(phi_Sb)*cosd(phi_bjg)) + y_sj*((-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg)) + (-sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg))*cosd(K_Sb)*cosd(phi_Sb)) + z_sj*((-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg)) + (-sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) + sind(w_bjg)*cosd(K_bjg))*cosd(K_Sb)*cosd(phi_Sb))) + n_ypg*(x_sj*((sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*cosd(K_bjg)*cosd(phi_bjg) - sind(K_Sb)*sind(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + y_sj*((-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*(sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb)) + (-sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg))*sind(K_Sb)*cosd(phi_Sb)) + z_sj*((sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*(sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb)) + (-sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) + sind(w_bjg)*cosd(K_bjg))*sind(K_Sb)*cosd(phi_Sb))) + n_zpg*(x_sj*(sind(K_bjg)*sind(phi_Sb)*cosd(phi_bjg) + sind(w_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + y_sj*((-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*sind(w_Sb)*cosd(phi_Sb) + (sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) + cosd(K_bjg)*cosd(w_bjg))*sind(phi_Sb)) + z_sj*((sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*sind(w_Sb)*cosd(phi_Sb) + (sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg))*sind(phi_Sb)));
 
-	A_point(0, 1) = (n_ypg*(cosd(K_bjg)*cosd(w_bjg) - sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + n_zpg*(cosd(K_bjg)*sind(w_bjg)
-		+ sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) - n_xpg*sind(K_bjg)*cosd(phi_bjg));
-
-
-	A_point(0, 2) = (n_xpg*sind(phi_bjg) + n_zpg*cosd(phi_bjg)*cosd(w_bjg) - n_ypg*cosd(phi_bjg)*sind(w_bjg));
-
-	MatrixXd B_PtWrtRot = PtEqnWrtRotSb(w_bjg, phi_bjg, K_bjg, x_sj, y_sj, z_sj, n_xpg, n_ypg, n_zpg);
-
-	MatrixXd B_RotWrtAng = RotWrtAngles(w_Sb, phi_Sb, K_Sb);
-
-	A_point.block(0, 3, 1, 3) = B_PtWrtRot.transpose()*B_RotWrtAng;
-
-	B_PtWrtRot.resize(0, 0);
-	B_RotWrtAng.resize(0, 0);
 
 
 	//4 Plane parameters
 	int i = 6 + 4 * planeNum;
 
-	A_point(0, i) = (x_bjg + x_sj*(sind(phi_bjg)*(sind(K_Sb)*sind(w_Sb) - cosd(K_Sb)*cosd(w_Sb)*sind(phi_Sb)) - sind(K_bjg)*cosd(phi_bjg)*(sind(K_Sb)*cosd(w_Sb)
-		+ cosd(K_Sb)*sind(phi_Sb)*sind(w_Sb)) + cosd(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) - y_sj*(sind(K_bjg)*cosd(phi_bjg)*(cosd(K_Sb)*cosd(w_Sb)
-			- sind(K_Sb)*sind(phi_Sb)*sind(w_Sb)) - sind(phi_bjg)*(cosd(K_Sb)*sind(w_Sb) + sind(K_Sb)*cosd(w_Sb)*sind(phi_Sb))
-			+ cosd(K_bjg)*sind(K_Sb)*cosd(phi_Sb)*cosd(phi_bjg)) + z_sj*(cosd(K_bjg)*cosd(phi_bjg)*sind(phi_Sb) + cosd(phi_Sb)*cosd(w_Sb)*sind(phi_bjg)
-				+ sind(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)*sind(w_Sb)) + z_Sjb*sind(phi_bjg) + x_Sjb*cosd(K_bjg)*cosd(phi_bjg) - y_Sjb*sind(K_bjg)*cosd(phi_bjg));
+	A_point(0, i) = x_Sjb + x_bjg*cosd(K_Sb)*cosd(phi_Sb) + x_sj*(-(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*sind(phi_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*sind(K_bjg)*cosd(phi_bjg) + cosd(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + y_bjg*(-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb)) + y_sj*((sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*sind(w_bjg)*cosd(phi_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) + cosd(K_bjg)*cosd(w_bjg)) + (-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*cosd(K_Sb)*cosd(phi_Sb)) + z_bjg*(sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb)) + z_sj*((sind(K_Sb)*sind(w_Sb) + sind(phi_Sb)*cosd(K_Sb)*cosd(w_Sb))*cosd(phi_bjg)*cosd(w_bjg) + (-sind(K_Sb)*cosd(w_Sb) + sind(phi_Sb)*sind(w_Sb)*cosd(K_Sb))*(sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg)) + (sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*cosd(K_Sb)*cosd(phi_Sb));
 
-	A_point(0, i + 1) = (y_bjg + x_Sjb*(sind(K_bjg)*cosd(w_bjg) + cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + y_Sjb*(cosd(K_bjg)*cosd(w_bjg)
-		- sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + x_sj*((sind(K_Sb)*cosd(w_Sb) + cosd(K_Sb)*sind(phi_Sb)*sind(w_Sb))*(cosd(K_bjg)*cosd(w_bjg)
-			- sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + cosd(K_Sb)*cosd(phi_Sb)*(sind(K_bjg)*cosd(w_bjg) + cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg))
-			- cosd(phi_bjg)*sind(w_bjg)*(sind(K_Sb)*sind(w_Sb) - cosd(K_Sb)*cosd(w_Sb)*sind(phi_Sb))) - y_sj*(sind(K_Sb)*cosd(phi_Sb)*(sind(K_bjg)*cosd(w_bjg)
-				+ cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg)) - (cosd(K_Sb)*cosd(w_Sb) - sind(K_Sb)*sind(phi_Sb)*sind(w_Sb))*(cosd(K_bjg)*cosd(w_bjg)
-					- sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + cosd(phi_bjg)*sind(w_bjg)*(cosd(K_Sb)*sind(w_Sb) + sind(K_Sb)*cosd(w_Sb)*sind(phi_Sb)))
-		- z_sj*(cosd(phi_Sb)*sind(w_Sb)*(cosd(K_bjg)*cosd(w_bjg) - sind(K_bjg)*sind(phi_bjg)*sind(w_bjg)) - sind(phi_Sb)*(sind(K_bjg)*cosd(w_bjg)
-			+ cosd(K_bjg)*sind(phi_bjg)*sind(w_bjg)) + cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)*sind(w_bjg)) - z_Sjb*cosd(phi_bjg)*sind(w_bjg));
+	A_point(0, i + 1) = x_bjg*sind(K_Sb)*cosd(phi_Sb) + x_sj*((sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*sind(K_bjg)*cosd(phi_bjg) - (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*sind(phi_bjg) + sind(K_Sb)*cosd(K_bjg)*cosd(phi_Sb)*cosd(phi_bjg)) + y_Sjb + y_bjg*(sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb)) + y_sj*((-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*sind(K_Sb)*cosd(phi_Sb) + (sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*(sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) + cosd(K_bjg)*cosd(w_bjg)) + (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*sind(w_bjg)*cosd(phi_bjg)) + z_bjg*(sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb)) + z_sj*((sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*sind(K_Sb)*cosd(phi_Sb) + (sind(K_Sb)*sind(phi_Sb)*sind(w_Sb) + cosd(K_Sb)*cosd(w_Sb))*(sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg)) + (sind(K_Sb)*sind(phi_Sb)*cosd(w_Sb) - sind(w_Sb)*cosd(K_Sb))*cosd(phi_bjg)*cosd(w_bjg));
 
-	A_point(0, i + 2) = (z_bjg + x_Sjb*(sind(K_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + y_Sjb*(cosd(K_bjg)*sind(w_bjg)
-		+ sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + x_sj*((sind(K_Sb)*cosd(w_Sb) + cosd(K_Sb)*sind(phi_Sb)*sind(w_Sb))*(cosd(K_bjg)*sind(w_bjg)
-			+ sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + cosd(K_Sb)*cosd(phi_Sb)*(sind(K_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
-			+ cosd(phi_bjg)*cosd(w_bjg)*(sind(K_Sb)*sind(w_Sb) - cosd(K_Sb)*cosd(w_Sb)*sind(phi_Sb))) + y_sj*((cosd(K_Sb)*cosd(w_Sb)
-				- sind(K_Sb)*sind(phi_Sb)*sind(w_Sb))*(cosd(K_bjg)*sind(w_bjg) + sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
-				- sind(K_Sb)*cosd(phi_Sb)*(sind(K_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg)) + cosd(phi_bjg)*cosd(w_bjg)*(cosd(K_Sb)*sind(w_Sb)
-					+ sind(K_Sb)*cosd(w_Sb)*sind(phi_Sb))) + z_sj*(sind(phi_Sb)*(sind(K_bjg)*sind(w_bjg) - cosd(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
-						- cosd(phi_Sb)*sind(w_Sb)*(cosd(K_bjg)*sind(w_bjg) + sind(K_bjg)*cosd(w_bjg)*sind(phi_bjg))
-						+ cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)*cosd(w_bjg)) + z_Sjb*cosd(phi_bjg)*cosd(w_bjg));
+	A_point(0, i + 2) = -x_bjg*sind(phi_Sb) + x_sj*(sind(K_bjg)*sind(w_Sb)*cosd(phi_Sb)*cosd(phi_bjg) - sind(phi_Sb)*cosd(K_bjg)*cosd(phi_bjg) - sind(phi_bjg)*cosd(phi_Sb)*cosd(w_Sb)) + y_bjg*sind(w_Sb)*cosd(phi_Sb) + y_sj*(-(-sind(K_bjg)*cosd(w_bjg) + sind(phi_bjg)*sind(w_bjg)*cosd(K_bjg))*sind(phi_Sb) + (sind(K_bjg)*sind(phi_bjg)*sind(w_bjg) + cosd(K_bjg)*cosd(w_bjg))*sind(w_Sb)*cosd(phi_Sb) + sind(w_bjg)*cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)) + z_Sjb + z_bjg*cosd(phi_Sb)*cosd(w_Sb) + z_sj*(-(sind(K_bjg)*sind(w_bjg) + sind(phi_bjg)*cosd(K_bjg)*cosd(w_bjg))*sind(phi_Sb) + (sind(K_bjg)*sind(phi_bjg)*cosd(w_bjg) - sind(w_bjg)*cosd(K_bjg))*sind(w_Sb)*cosd(phi_Sb) + cosd(phi_Sb)*cosd(phi_bjg)*cosd(w_Sb)*cosd(w_bjg));
 
 	A_point(0, i + 3) = 1;
 
 
 	return A_point;
+}
+
+MatrixXd BoresightLS::computeAPlane(int plane_index)
+{
+	/*
+	 *  The Equation: n1^2 + n2^2 + n3^2 = 1
+	 */
+	MatrixXd A_plane = MatrixXd::Zero(1, u);
+	// Don't need d here
+	double n_xpg = x0(6+plane_index); // n1
+	double n_ypg = x0(6+plane_index+1); // n2
+	double n_zpg = x0(6+plane_index+2); // n3
+
+	int i = 6 + 4*plane_index;
+
+	A_plane(0,i)   = 2*n_xpg;
+	A_plane(0,i+1) = 2*n_ypg;
+	A_plane(0,i+2) = 2*n_zpg;
+
+	return A_plane;
 }
 
 
